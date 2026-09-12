@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+**/secrets*
+*.pem
+data/activations/*.json
+data/activations/*.npz
+__pycache__/
+.DS_Store
+.cache/
+**/cache/
