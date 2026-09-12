@@ -99,6 +99,69 @@ for vi in range(len(vertices)):
             region_ids[vi] = MACRO[name]
             mapped += 1
 
+# ── 3b. Map Destrieux labels → anatomical lobes (for hover labels) ─────
+# These are ANATOMICAL divisions (Prefrontal, Occipital, ...), separate from
+# the functional macro-regions above. Used for lobe outlines + hover names.
+LOBE_NAMES = [
+    "Prefrontal", "Motor", "Parietal",
+    "Temporal", "Occipital", "Cingulate", "Insula",
+]
+LOBE = {
+    # 0 = Prefrontal
+    "G_and_S_frontomargin": 0, "G_and_S_transv_frontopol": 0,
+    "G_front_inf-Opercular": 0, "G_front_inf-Orbital": 0, "G_front_inf-Triangul": 0,
+    "G_front_middle": 0, "G_front_sup": 0,
+    "G_orbital": 0, "G_rectus": 0, "G_subcallosal": 0,
+    "S_front_inf": 0, "S_front_middle": 0, "S_front_sup": 0,
+    "S_orbital-H_Shaped": 0, "S_orbital_lateral": 0, "S_orbital_med-olfact": 0,
+    "S_suborbital": 0, "Lat_Fis-ant-Horizont": 0, "Lat_Fis-ant-Vertical": 0,
+
+    # 1 = Motor / central
+    "G_precentral": 1, "G_and_S_paracentral": 1, "G_and_S_subcentral": 1,
+    "S_central": 1, "S_precentral-inf-part": 1, "S_precentral-sup-part": 1,
+
+    # 2 = Parietal
+    "G_parietal_sup": 2, "G_pariet_inf-Angular": 2, "G_pariet_inf-Supramar": 2,
+    "G_postcentral": 2, "G_precuneus": 2,
+    "S_intrapariet_and_P_trans": 2, "S_postcentral": 2, "S_subparietal": 2,
+    "S_cingul-Marginalis": 2, "S_interm_prim-Jensen": 2, "Lat_Fis-post": 2,
+
+    # 3 = Temporal
+    "G_temp_sup-G_T_transv": 3, "G_temp_sup-Lateral": 3,
+    "G_temp_sup-Plan_polar": 3, "G_temp_sup-Plan_tempo": 3,
+    "G_temporal_inf": 3, "G_temporal_middle": 3,
+    "G_oc-temp_lat-fusifor": 3, "G_oc-temp_med-Parahip": 3, "Pole_temporal": 3,
+    "S_temporal_inf": 3, "S_temporal_sup": 3, "S_temporal_transverse": 3,
+    "S_collat_transv_ant": 3, "S_oc-temp_lat": 3,
+
+    # 4 = Occipital
+    "G_cuneus": 4, "G_occipital_middle": 4, "G_occipital_sup": 4,
+    "G_and_S_occipital_inf": 4, "Pole_occipital": 4, "G_oc-temp_med-Lingual": 4,
+    "S_calcarine": 4, "S_oc_middle_and_Lunatus": 4, "S_oc_sup_and_transversal": 4,
+    "S_occipital_ant": 4, "S_parieto_occipital": 4,
+    "S_collat_transv_post": 4, "S_oc-temp_med_and_Lingual": 4,
+
+    # 5 = Cingulate
+    "G_and_S_cingul-Ant": 5, "G_and_S_cingul-Mid-Ant": 5, "G_and_S_cingul-Mid-Post": 5,
+    "G_cingul-Post-dorsal": 5, "G_cingul-Post-ventral": 5, "S_pericallosal": 5,
+
+    # 6 = Insula
+    "G_Ins_lg_and_S_cent_ins": 6, "G_insular_short": 6,
+    "S_circular_insula_ant": 6, "S_circular_insula_inf": 6, "S_circular_insula_sup": 6,
+}
+
+lobe_ids = np.full(len(vertices), -1, dtype=np.int8)
+lobe_mapped = 0
+for vi in range(len(vertices)):
+    label_idx = all_labels[vi]
+    if 0 <= label_idx < len(label_names):
+        name = label_names[label_idx]
+        if name in LOBE:
+            lobe_ids[vi] = LOBE[name]
+            lobe_mapped += 1
+print(f"  Mapped {lobe_mapped}/{len(vertices)} vertices to lobes "
+      f"({lobe_mapped*100/len(vertices):.1f}%)")
+
 print(f"  Mapped {mapped}/{len(vertices)} vertices to macro-regions "
       f"({mapped*100/len(vertices):.1f}%)")
 unmapped_names = set()
@@ -115,12 +178,14 @@ mesh = {
     "vertices": [round(float(v), 4) for v in vertices.flatten()],
     "faces": faces.flatten().tolist(),
     "region_ids": region_ids.tolist(),
+    "lobe_ids": lobe_ids.tolist(),
     "n_vertices": len(vertices),
     "n_left": int(n_left),
     "regions": [
         "visual", "language", "reward_novelty",
         "memory_familiarity", "emotional_arousal", "attention_salience",
     ],
+    "lobes": LOBE_NAMES,
 }
 
 OUT.parent.mkdir(parents=True, exist_ok=True)

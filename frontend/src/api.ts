@@ -44,4 +44,18 @@ export const api = {
   exportUrl: (videoId: string) => `/api/videos/${videoId}/export`,
 
   health: () => fetch("/api/health").then((r) => json<Record<string, unknown>>(r)),
+
+  uploadActivation: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch("/api/videos/upload-activation", { method: "POST", body: form })
+      .then((r) => json<{ status: string; video_id: string; windows: number; duration_sec: number }>(r));
+  },
+
+  uploadVideo: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch("/api/videos/upload-video", { method: "POST", body: form })
+      .then((r) => json<{ status: string; video_id: string; size_mb: number; has_activation: boolean }>(r));
+  },
 };

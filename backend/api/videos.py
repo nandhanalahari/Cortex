@@ -1,9 +1,15 @@
-"""API routes (PRD Section 6). This is the contract the frontend depends on."""
+"""API routes (PRD Section 6). This is the contract the frontend depends on.
+
+TRIBE v2 inference NEVER runs here. It runs on Kaggle GPU T4x2 only.
+This backend only reads the precomputed JSON that the notebook exports.
+"""
 from __future__ import annotations
 
+import json
+import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from ..config import settings
@@ -31,6 +37,83 @@ router = APIRouter(prefix="/api/videos", tags=["videos"])
 def list_videos() -> dict:
     """List demo videos that have a precomputed activation JSON available."""
     return {"videos": activation_loader.list_available_videos()}
+
+
+# ── Upload endpoints (Kaggle output → local storage) ──────────────────
+
+@router.post("/upload-activation")
+async def upload_activation(file: UploadFile = File(...)) -> dict:
+    """Accept a TRIBE v2 activation JSON exported from the Kaggle notebook.
+
+    The JSON must match the handoff schema: {video_id, duration_sec, windows[...]}.
+    Saved to data/activations/{video_id}.json so the UI can load it immediately.
+    """
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="File must be a .json file.")
+
+    raw = await file.read()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
+
+    video_id = payload.get("video_id")
+    if not video_id or "windows" not in payload:
+        raise HTTPException(
+            status_code=422,
+            detail="JSON must have 'video_id' and 'windows' keys (TRIBE v2 handoff schema).",
+        )
+
+    # Validate against our Pydantic model
+    try:
+        data = ActivationData.model_validate(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Schema validation failed: {exc}") from exc
+
+    # Save to activations directory
+    dest = settings.ACTIVATION_DATA_PATH / f"{video_id}.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    return {
+        "status": "ok",
+        "video_id": video_id,
+        "windows": len(data.windows),
+        "duration_sec": data.duration_sec,
+        "source": "kaggle_cloud_gpu",
+    }
+
+
+@router.post("/upload-video")
+async def upload_video(file: UploadFile = File(...)) -> dict:
+    """Upload a video file to pair with its activation JSON.
+
+    The filename (minus extension) becomes the video_id, matching the activation JSON.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided.")
+
+    allowed = (".mp4", ".mov", ".webm", ".avi", ".mkv")
+    ext = Path(file.filename).suffix.lower()
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail=f"Allowed formats: {', '.join(allowed)}")
+
+    video_id = Path(file.filename).stem
+    dest = settings.VIDEO_DATA_PATH / f"{video_id}.mp4"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    with dest.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # Auto-pair: does TRIBE v2 already have an activation JSON for this video?
+    has_activation = video_id in activation_loader.list_available_videos()
+
+    return {
+        "status": "ok",
+        "video_id": video_id,
+        "size_mb": round(dest.stat().st_size / 1024 / 1024, 2),
+        "has_activation": has_activation,
+    }
 
 
 @router.post("/{video_id}/load-activation")

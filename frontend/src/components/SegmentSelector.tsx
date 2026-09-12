@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { Selection } from "../types";
 
 interface Props {
@@ -8,63 +8,93 @@ interface Props {
   containerRef: React.RefObject<HTMLDivElement>;
 }
 
-/**
- * F4: manual segment selection. Drag horizontally across the timeline to pick a
- * time range to redo. Renders a transparent overlay that captures drag and maps
- * pixel positions to seconds using the shared timeline container rect.
- *
- * State is kept in refs (not useState) so mid-drag handlers never read stale
- * values — robust even if events arrive in the same tick.
- */
-export default function SegmentSelector({ duration, onSelect, containerRef }: Props) {
-  const dragging = useRef(false);
-  const startFrac = useRef(0);
-  const lastRange = useRef<Selection | null>(null);
+/** Fixed regenerate window length, in seconds. */
+export const SEGMENT_LEN = 5;
 
-  const fracFromEvent = useCallback(
+/**
+ * F4: segment selection is a FIXED 5-second window the user slides along the
+ * timeline. Click anywhere to drop the window there, or drag the pink band to
+ * reposition it. The window is always exactly SEGMENT_LEN long (clamped to the
+ * clip), so every regenerate request has a consistent duration.
+ */
+export default function SegmentSelector({ duration, selection, onSelect, containerRef }: Props) {
+  const dragging = useRef(false);
+  const grabOffset = useRef(0); // seconds between window start and cursor
+
+  const winLen = Math.min(SEGMENT_LEN, duration || SEGMENT_LEN);
+
+  const timeFromClientX = useCallback(
     (clientX: number) => {
       const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return 0;
-      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      if (!rect || !duration) return 0;
+      const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return frac * duration;
     },
-    [containerRef],
+    [containerRef, duration],
   );
 
-  const onDown = (e: React.MouseEvent) => {
+  const clampStart = useCallback(
+    (start: number) => Math.max(0, Math.min(duration - winLen, start)),
+    [duration, winLen],
+  );
+
+  const placeAt = useCallback(
+    (startCandidate: number) => {
+      const start = clampStart(startCandidate);
+      onSelect({ t_start: start, t_end: start + winLen });
+    },
+    [clampStart, onSelect, winLen],
+  );
+
+  // Auto-place a default window as soon as we know the duration.
+  useEffect(() => {
+    if (duration && !selection) placeAt(0);
+  }, [duration]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onTrackDown = (e: React.MouseEvent) => {
     if (!duration) return;
     e.stopPropagation();
+    const t = timeFromClientX(e.clientX);
+    // Center the window on the click.
+    placeAt(t - winLen / 2);
     dragging.current = true;
-    startFrac.current = fracFromEvent(e.clientX);
-    const t = startFrac.current * duration;
-    lastRange.current = { t_start: t, t_end: t };
-    onSelect(lastRange.current);
+    grabOffset.current = winLen / 2;
+  };
+
+  const onBandDown = (e: React.MouseEvent) => {
+    if (!duration || !selection) return;
+    e.stopPropagation();
+    dragging.current = true;
+    grabOffset.current = timeFromClientX(e.clientX) - selection.t_start;
   };
 
   const onMove = (e: React.MouseEvent) => {
     if (!dragging.current || !duration) return;
-    const cur = fracFromEvent(e.clientX);
-    const a = Math.min(startFrac.current, cur);
-    const b = Math.max(startFrac.current, cur);
-    lastRange.current = { t_start: a * duration, t_end: b * duration };
-    onSelect(lastRange.current);
+    placeAt(timeFromClientX(e.clientX) - grabOffset.current);
   };
 
-  const onUp = () => {
-    if (!dragging.current) return;
-    dragging.current = false;
-    const r = lastRange.current;
-    if (r && r.t_end - r.t_start < 0.2) {
-      onSelect(null); // a click / tiny drag deselects
-    }
-  };
+  const onUp = () => { dragging.current = false; };
+
+  const leftPct = selection ? (selection.t_start / duration) * 100 : 0;
+  const widthPct = (winLen / (duration || 1)) * 100;
 
   return (
     <div
       className="segment-selector"
-      onMouseDown={onDown}
+      onMouseDown={onTrackDown}
       onMouseMove={onMove}
       onMouseUp={onUp}
       onMouseLeave={onUp}
-    />
+    >
+      {selection && duration > 0 && (
+        <div
+          className="segment-window"
+          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+          onMouseDown={onBandDown}
+        >
+          <span className="segment-window-label">{winLen.toFixed(0)}s</span>
+        </div>
+      )}
+    </div>
   );
 }

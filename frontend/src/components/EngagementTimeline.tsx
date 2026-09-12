@@ -7,6 +7,7 @@ interface Props {
   duration: number;
   currentTime: number;
   selection: Selection | null;
+  regenMode: boolean;
   onSeek: (t: number) => void;
   onSelect: (sel: Selection | null) => void;
 }
@@ -24,6 +25,7 @@ export default function EngagementTimeline({
   duration,
   currentTime,
   selection,
+  regenMode,
   onSeek,
   onSelect,
 }: Props) {
@@ -96,8 +98,8 @@ export default function EngagementTimeline({
             return <circle key={i} cx={x} cy={y} r="3" fill="#fff" stroke="#FCA50A" strokeWidth="1.5" />;
           })}
 
-          {/* Selection band */}
-          {selection && (
+          {/* Selection band (only while editing a segment) */}
+          {regenMode && selection && (
             <rect
               x={(selection.t_start / duration) * VB_W}
               y={0}
@@ -109,16 +111,19 @@ export default function EngagementTimeline({
             />
           )}
 
-          {/* Playhead */}
-          <line x1={playheadX} y1={0} x2={playheadX} y2={VB_H} stroke="#fff" strokeWidth="1.5" opacity="0.8" />
+          {/* Playhead — white line synced to the video frame / brain */}
+          <line x1={playheadX} y1={0} x2={playheadX} y2={VB_H} stroke="#fff" strokeWidth="1.5" opacity="0.9" />
         </svg>
 
-        <SegmentSelector
-          duration={duration}
-          selection={selection}
-          onSelect={onSelect}
-          containerRef={wrapRef}
-        />
+        {/* 5-second edit window only appears in regenerate mode */}
+        {regenMode && (
+          <SegmentSelector
+            duration={duration}
+            selection={selection}
+            onSelect={onSelect}
+            containerRef={wrapRef}
+          />
+        )}
       </div>
 
       <div className="timeline-labels">

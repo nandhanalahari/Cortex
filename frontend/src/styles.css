@@ -164,6 +164,22 @@ select {
   opacity: 0.6;
 }
 
+.brain-tooltip {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ffd9a8;
+  background: rgba(20, 10, 4, 0.9);
+  border: 1px solid rgba(255, 140, 40, 0.5);
+  border-radius: 4px;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+
 .brain-legend {
   position: absolute;
   bottom: 14px;
@@ -447,6 +463,188 @@ select {
 
 .export-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
 .spliced-ok { color: var(--green); font-size: 12px; }
+
+/* ---- Cloud GPU badge ---- */
+.badge-cloud {
+  background: #0a2a2a;
+  color: #4fc3f7;
+  border: 1px solid #1a4a4a;
+}
+
+/* ---- Upload button ---- */
+.btn-upload {
+  background: var(--panel-2);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.15s;
+  letter-spacing: 0.5px;
+}
+.btn-upload:hover { border-color: var(--accent); background: var(--panel); }
+
+/* ---- Upload panel ---- */
+.upload-panel { max-width: 520px; }
+.upload-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.upload-subtitle {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.cloud-tag {
+  font-size: 9px;
+  letter-spacing: 1px;
+  background: #0a2a2a;
+  color: #4fc3f7;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.upload-zones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.upload-zone {
+  background: var(--bg2);
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 20px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.upload-zone:hover { border-color: var(--accent); background: var(--panel-2); }
+.upload-zone.done { border-color: var(--green); border-style: solid; }
+.upload-zone-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+.upload-zone.done .upload-zone-icon { color: var(--green); }
+.upload-zone-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.upload-zone-hint {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.upload-status {
+  font-size: 11px;
+  color: var(--green);
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  background: #0a1a12;
+  border-radius: 4px;
+}
+.upload-status.err { color: var(--red); background: #1a0a12; }
+
+.upload-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ---- Live prediction showcase overlay ---- */
+.showcase-overlay {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 5;
+}
+.showcase-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #4fc3f7;
+  background: rgba(10, 25, 30, 0.85);
+  border: 1px solid #1a4a4a;
+  border-radius: 20px;
+  padding: 6px 14px;
+  backdrop-filter: blur(6px);
+}
+.showcase-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4fc3f7;
+  box-shadow: 0 0 8px #4fc3f7;
+  animation: showcase-pulse 1s ease-in-out infinite;
+}
+@keyframes showcase-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+.showcase-progress {
+  width: 220px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.showcase-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4fc3f7, #ff4fd8);
+  border-radius: 2px;
+  transition: width 0.06s linear;
+}
+.showcase-time {
+  font-size: 10px;
+  color: var(--text2);
+  letter-spacing: 0.5px;
+}
+
+/* ---- 5-second regenerate window ---- */
+.segment-window {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 79, 216, 0.18);
+  border-left: 2px solid #ff4fd8;
+  border-right: 2px solid #ff4fd8;
+  cursor: grab;
+  box-sizing: border-box;
+}
+.segment-window:active { cursor: grabbing; }
+.segment-window-label {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #ff4fd8;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
 
 /* ---- Responsive ---- */
 @media (max-width: 900px) {

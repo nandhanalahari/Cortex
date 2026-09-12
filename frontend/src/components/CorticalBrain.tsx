@@ -18,6 +18,8 @@ interface BrainMeshData {
   vertices: number[];
   faces: number[];
   region_ids: number[];
+  lobe_ids?: number[];
+  lobes?: string[];
   n_vertices: number;
   n_left: number;
 }
@@ -28,11 +30,14 @@ interface Props {
   intensity: number;
 }
 
+interface HoverInfo { name: string; x: number; y: number; }
+
 export default function CorticalBrain({ levels, intensity }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const levelsRef = useRef(levels);
   const intensityRef = useRef(intensity);
   const [loading, setLoading] = useState(true);
+  const [hover, setHover] = useState<HoverInfo | null>(null);
 
   useEffect(() => { levelsRef.current = levels; }, [levels]);
   useEffect(() => { intensityRef.current = intensity; }, [intensity]);
@@ -89,6 +94,8 @@ export default function CorticalBrain({ levels, intensity }: Props) {
       geometry.scale(scale, scale, scale);
 
       const regionIds = new Int8Array(data.region_ids);
+      const lobeIds = new Int8Array(data.lobe_ids ?? []);
+      const lobeNames = data.lobes ?? [];
 
       /* ── Renderer ────────────────────────────────────────────────── */
       const renderer = new THREE.WebGLRenderer({ canvas: cvs, antialias: true, alpha: false });
@@ -101,18 +108,18 @@ export default function CorticalBrain({ levels, intensity }: Props) {
       scene.background = new THREE.Color(0x050508);
 
       const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-      camera.position.set(0, 0.15, 4.5);
+      camera.position.set(0, 0.1, 3.9);
       camera.lookAt(0, 0, 0);
 
-      /* ── Lighting ────────────────────────────────────────────────── */
-      scene.add(new THREE.AmbientLight(0x1a1a2e, 0.6));
-      const keyLight = new THREE.DirectionalLight(0xd0c8e0, 0.9);
+      /* ── Lighting (soft, neutral-warm like a studio brain model) ─── */
+      scene.add(new THREE.AmbientLight(0x2a2620, 0.7));
+      const keyLight = new THREE.DirectionalLight(0xfff2e0, 1.0);
       keyLight.position.set(-3, 4, 5);
       scene.add(keyLight);
-      const rimLight = new THREE.DirectionalLight(0x5060a0, 0.4);
+      const rimLight = new THREE.DirectionalLight(0x9098b0, 0.35);
       rimLight.position.set(3, -2, -4);
       scene.add(rimLight);
-      const topLight = new THREE.DirectionalLight(0x8080b0, 0.3);
+      const topLight = new THREE.DirectionalLight(0xd8d0c0, 0.35);
       topLight.position.set(0, 5, 0);
       scene.add(topLight);
 
@@ -125,6 +132,11 @@ export default function CorticalBrain({ levels, intensity }: Props) {
 
       const innerColors = new Float32Array(nVerts * 3);
       const DARK = [0.015, 0.015, 0.03];
+      // Firing regions strobe from a matte (non-glowing) orange up to a
+      // glowing hot orange. HOT values exceed 1.0 so ACES tone-mapping pushes
+      // the peak toward a white-hot highlight.
+      const MATTE_ORANGE = [0.42, 0.13, 0.02];
+      const HOT_ORANGE = [1.55, 0.62, 0.14];
       for (let i = 0; i < nVerts; i++) {
         innerColors[i * 3]     = DARK[0];
         innerColors[i * 3 + 1] = DARK[1];
@@ -139,44 +151,69 @@ export default function CorticalBrain({ levels, intensity }: Props) {
       brainGroup.add(innerMesh);
 
       /* ── Layer 2: Outer glass shell (translucent, catches light) ── */
+      // Warm ivory/beige tint so the translucent brain reads like a real
+      // anatomical specimen (à la BrainFacts.org), not cold glass.
       const outerMat = new THREE.MeshStandardMaterial({
-        color: 0xd8d8e8,
+        color: 0xe6d8c6,
         transparent: true,
-        opacity: 0.38,
-        roughness: 0.28,
-        metalness: 0.08,
+        opacity: 0.4,
+        roughness: 0.5,
+        metalness: 0.04,
         depthWrite: false,
         side: THREE.FrontSide,
       });
       const outerMesh = new THREE.Mesh(geometry, outerMat);
       brainGroup.add(outerMesh);
 
-      // Start at a 3/4 lateral view (like Percept's default)
-      brainGroup.rotation.set(-0.2, -2.3, 0.1);
+      // Clean left-lateral framing like the BrainFacts.org 3D brain: left
+      // hemisphere facing the camera, frontal pole to the left, occipital to
+      // the right, superior up. (Lobe boundaries are kept for hover but not
+      // drawn — no seam lines.)
+      brainGroup.rotation.set(-0.06, 1.62, 0);
 
-      /* ── Interaction: drag to rotate, scroll to zoom ─────────────── */
+      /* ── Interaction: drag to rotate, scroll to zoom, hover for lobe ── */
       let isDragging = false;
       let lastX = 0, lastY = 0;
       const yAx = new THREE.Vector3(0, 1, 0);
       const xAx = new THREE.Vector3(1, 0, 0);
       const dq = new THREE.Quaternion();
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
 
       const onDown = (e: PointerEvent) => {
         isDragging = true;
         lastX = e.clientX;
         lastY = e.clientY;
+        setHover(null);
         cvs.setPointerCapture(e.pointerId);
       };
       const onMove = (e: PointerEvent) => {
-        if (!isDragging) return;
-        dq.setFromAxisAngle(yAx, (e.clientX - lastX) * 0.008);
-        brainGroup.quaternion.premultiply(dq);
-        dq.setFromAxisAngle(xAx, (e.clientY - lastY) * 0.008);
-        brainGroup.quaternion.premultiply(dq);
-        lastX = e.clientX;
-        lastY = e.clientY;
+        if (isDragging) {
+          dq.setFromAxisAngle(yAx, (e.clientX - lastX) * 0.008);
+          brainGroup.quaternion.premultiply(dq);
+          dq.setFromAxisAngle(xAx, (e.clientY - lastY) * 0.008);
+          brainGroup.quaternion.premultiply(dq);
+          lastX = e.clientX;
+          lastY = e.clientY;
+          return;
+        }
+        // Hover: raycast to find which lobe is under the cursor.
+        if (!lobeIds.length) return;
+        const rect = cvs.getBoundingClientRect();
+        pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObject(outerMesh, false);
+        const face = hits.length ? hits[0].face : null;
+        const lid = face ? lobeIds[face.a] : -1;
+        if (lid >= 0 && lid < lobeNames.length) {
+          setHover({ name: lobeNames[lid], x: e.clientX - rect.left, y: e.clientY - rect.top });
+        } else {
+          setHover(null);
+        }
       };
       const onUp = () => { isDragging = false; };
+      const onLeave = () => { isDragging = false; setHover(null); };
       const onWheel = (e: WheelEvent) => {
         e.preventDefault();
         camera.position.z = THREE.MathUtils.clamp(
@@ -186,7 +223,7 @@ export default function CorticalBrain({ levels, intensity }: Props) {
       cvs.addEventListener("pointerdown", onDown);
       cvs.addEventListener("pointermove", onMove);
       cvs.addEventListener("pointerup", onUp);
-      cvs.addEventListener("pointerleave", onUp);
+      cvs.addEventListener("pointerleave", onLeave);
       cvs.addEventListener("wheel", onWheel, { passive: false });
 
       /* ── Resize observer ─────────────────────────────────────────── */
@@ -203,11 +240,12 @@ export default function CorticalBrain({ levels, intensity }: Props) {
       /* ── Animation loop ──────────────────────────────────────────── */
       const smoothLevels = new Float32Array(6);
       const clock = new THREE.Clock();
-      const idleQ = new THREE.Quaternion();
+      let elapsed = 0;
 
       const render = () => {
         if (disposed) return;
         const dt = clock.getDelta();
+        elapsed += dt;
 
         // Smooth-ease activation levels toward targets
         const k = 1 - Math.pow(0.002, dt);
@@ -217,43 +255,50 @@ export default function CorticalBrain({ levels, intensity }: Props) {
           smoothLevels[i] += (target - smoothLevels[i]) * k;
         }
 
-        // Update inner mesh vertex colors — only bright for high activations
+        // Firing regions strobe matte orange -> glowing hot orange. No
+        // parcellation colors: just a dark base with a strobing orange section.
         const colorAttr = innerMesh.geometry.attributes.color as THREE.BufferAttribute;
         const arr = colorAttr.array as Float32Array;
+        // Sharp strobe in [0,1]: cubic curve dwells on the matte side, then
+        // snaps up to hot — a strobe rather than a soft pulse.
+        const strobe = Math.pow(0.5 + 0.5 * Math.sin(elapsed * 5.0), 3.0);
+
+        // Relative gate: only regions NEAR the current peak fire, so distinct
+        // sections flash and change over time instead of the whole cortex.
+        let maxLevel = 1e-4;
+        for (let i = 0; i < 6; i++) if (smoothLevels[i] > maxLevel) maxLevel = smoothLevels[i];
+        const GATE = 0.72; // fraction of the peak a region must reach to fire
+
         for (let vi = 0; vi < nVerts; vi++) {
           const reg = regionIds[vi];
-          if (reg >= 0 && reg < 6) {
+          let t = 0; // firing strength for this vertex's region
+          if (reg >= 0 && reg < 6 && maxLevel > 0.12) {
             const level = smoothLevels[reg];
-            if (level > 0.08) {
-              const [cr, cg, cb] = REGIONS[reg].rgb;
-              // Ramp: fades in gently, peaks brightly
-              const t = Math.pow((level - 0.08) / 0.92, 0.7);
-              const glow = t * 0.85;
-              arr[vi * 3]     = DARK[0] + cr * glow;
-              arr[vi * 3 + 1] = DARK[1] + cg * glow;
-              arr[vi * 3 + 2] = DARK[2] + cb * glow;
-            } else {
-              arr[vi * 3]     = DARK[0];
-              arr[vi * 3 + 1] = DARK[1];
-              arr[vi * 3 + 2] = DARK[2];
+            const rel = level / maxLevel;            // 0..1 closeness to peak region
+            if (rel > GATE) {
+              const gate = (rel - GATE) / (1 - GATE); // 0 at cutoff -> 1 at peak
+              t = Math.pow(gate, 1.1) * Math.pow(level, 0.5);
             }
-          } else {
-            arr[vi * 3]     = DARK[0];
-            arr[vi * 3 + 1] = DARK[1];
-            arr[vi * 3 + 2] = DARK[2];
           }
+          // Blend matte -> hot orange by the strobe; scale by firing strength.
+          const cr = MATTE_ORANGE[0] + (HOT_ORANGE[0] - MATTE_ORANGE[0]) * strobe;
+          const cg = MATTE_ORANGE[1] + (HOT_ORANGE[1] - MATTE_ORANGE[1]) * strobe;
+          const cb = MATTE_ORANGE[2] + (HOT_ORANGE[2] - MATTE_ORANGE[2]) * strobe;
+          arr[vi * 3]     = DARK[0] + cr * t;
+          arr[vi * 3 + 1] = DARK[1] + cg * t;
+          arr[vi * 3 + 2] = DARK[2] + cb * t;
         }
         colorAttr.needsUpdate = true;
 
-        // Outer shell opacity gently reacts to overall intensity
+        // The translucent shell must NEVER glow — only the firing inner-mesh
+        // vertices glow, showing through the glass locally. So the shell keeps
+        // a constant tint with zero emissive; opacity eases only slightly with
+        // overall intensity (that's transparency, not light emission).
         const act = intensityRef.current;
-        outerMat.opacity = 0.32 + act * 0.1;
+        outerMat.opacity = 0.34 + act * 0.08;
+        outerMat.emissive.setRGB(0, 0, 0);
 
-        // Idle auto-rotation
-        if (!isDragging) {
-          idleQ.setFromAxisAngle(yAx, dt * 0.06);
-          brainGroup.quaternion.premultiply(idleQ);
-        }
+        // Static frame like the website — no idle auto-rotation (drag to rotate).
 
         renderer.render(scene, camera);
         animId = requestAnimationFrame(render);
@@ -267,7 +312,7 @@ export default function CorticalBrain({ levels, intensity }: Props) {
         cvs.removeEventListener("pointerdown", onDown);
         cvs.removeEventListener("pointermove", onMove);
         cvs.removeEventListener("pointerup", onUp);
-        cvs.removeEventListener("pointerleave", onUp);
+        cvs.removeEventListener("pointerleave", onLeave);
         cvs.removeEventListener("wheel", onWheel);
         geometry.dispose();
         innerGeo.dispose();
@@ -287,9 +332,14 @@ export default function CorticalBrain({ levels, intensity }: Props) {
     <div className="brain-container">
       {loading && <div className="brain-loading">Loading cortical mesh…</div>}
       <canvas ref={canvasRef} className="brain-canvas" tabIndex={0} />
+      {hover && (
+        <div className="brain-tooltip" style={{ left: hover.x + 14, top: hover.y + 12 }}>
+          {hover.name}
+        </div>
+      )}
       <div className="brain-labels">
         <span className="brain-mesh-label">FSAVERAGE5 · 20,484 VERTICES · DESTRIEUX PARCELLATION</span>
-        <span className="brain-hint">DRAG TO ROTATE · SCROLL TO ZOOM</span>
+        <span className="brain-hint">DRAG TO ROTATE · SCROLL TO ZOOM · HOVER FOR LOBE</span>
       </div>
       <div className="brain-legend">
         <span>Low</span>
