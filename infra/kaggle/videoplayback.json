@@ -1,0 +1,54 @@
+{
+  "video_id": "videoplayback",
+  "duration_sec": 5.01,
+  "windows": [
+    {
+      "t_start": 0.0,
+      "t_end": 1.5,
+      "regions": {
+        "visual": 0.7679360816522324,
+        "language": 0.231902882937827,
+        "reward_novelty": 0.4253873379865982,
+        "memory_familiarity": 0.5648892564917749,
+        "emotional_arousal": 0.2935585867869209,
+        "attention_salience": 0.3874289247309422
+      }
+    },
+    {
+      "t_start": 1.5,
+      "t_end": 3.0,
+      "regions": {
+        "visual": 0.5633133889247303,
+        "language": 0.7167000394941068,
+        "reward_novelty": 0.5054078735991616,
+        "memory_familiarity": 0.5563380620094502,
+        "emotional_arousal": 0.7774467527674704,
+        "attention_salience": 0.4476719893968393
+      }
+    },
+    {
+      "t_start": 3.0,
+      "t_end": 4.5,
+      "regions": {
+        "visual": 0.23185171287234266,
+        "language": 0.675500188845893,
+        "reward_novelty": 0.3163097891089305,
+        "memory_familiarity": 0.2283714566439442,
+        "emotional_arousal": 0.682302290233161,
+        "attention_salience": 0.37330745378373453
+      }
+    },
+    {
+      "t_start": 4.5,
+      "t_end": 5.01,
+      "regions": {
+        "visual": 0.43727264591212317,
+        "language": 0.5001767474531383,
+        "reward_novelty": 0.8929586451459444,
+        "memory_familiarity": 0.8437881272711767,
+        "emotional_arousal": 0.26439123305052437,
+        "attention_salience": 0.8968268023580324
+      }
+    }
+  ]
+}

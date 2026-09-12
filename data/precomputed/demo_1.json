@@ -1,0 +1,16 @@
+{
+  "video_id": "demo_1",
+  "duration_sec": 15.0,
+  "windows": [
+    { "t_start": 0.0,  "t_end": 1.5,  "regions": { "visual": 0.42, "language": 0.18, "reward_novelty": 0.30, "memory_familiarity": 0.22, "emotional_arousal": 0.28, "attention_salience": 0.35 } },
+    { "t_start": 1.5,  "t_end": 3.0,  "regions": { "visual": 0.55, "language": 0.24, "reward_novelty": 0.48, "memory_familiarity": 0.25, "emotional_arousal": 0.41, "attention_salience": 0.52 } },
+    { "t_start": 3.0,  "t_end": 4.5,  "regions": { "visual": 0.63, "language": 0.31, "reward_novelty": 0.66, "memory_familiarity": 0.28, "emotional_arousal": 0.58, "attention_salience": 0.67 } },
+    { "t_start": 4.5,  "t_end": 6.0,  "regions": { "visual": 0.71, "language": 0.44, "reward_novelty": 0.79, "memory_familiarity": 0.33, "emotional_arousal": 0.72, "attention_salience": 0.81 } },
+    { "t_start": 6.0,  "t_end": 7.5,  "regions": { "visual": 0.48, "language": 0.29, "reward_novelty": 0.34, "memory_familiarity": 0.30, "emotional_arousal": 0.31, "attention_salience": 0.38 } },
+    { "t_start": 7.5,  "t_end": 9.0,  "regions": { "visual": 0.40, "language": 0.22, "reward_novelty": 0.26, "memory_familiarity": 0.35, "emotional_arousal": 0.24, "attention_salience": 0.29 } },
+    { "t_start": 9.0,  "t_end": 10.5, "regions": { "visual": 0.58, "language": 0.38, "reward_novelty": 0.55, "memory_familiarity": 0.31, "emotional_arousal": 0.53, "attention_salience": 0.60 } },
+    { "t_start": 10.5, "t_end": 12.0, "regions": { "visual": 0.69, "language": 0.47, "reward_novelty": 0.74, "memory_familiarity": 0.29, "emotional_arousal": 0.77, "attention_salience": 0.79 } },
+    { "t_start": 12.0, "t_end": 13.5, "regions": { "visual": 0.52, "language": 0.33, "reward_novelty": 0.44, "memory_familiarity": 0.40, "emotional_arousal": 0.46, "attention_salience": 0.49 } },
+    { "t_start": 13.5, "t_end": 15.0, "regions": { "visual": 0.60, "language": 0.51, "reward_novelty": 0.62, "memory_familiarity": 0.55, "emotional_arousal": 0.64, "attention_salience": 0.66 } }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "video_id": "battlefield-tours-by-leger-holidays-history-channel-ww1-5-second",
+  "duration_sec": 5.09,
+  "windows": [
+    {
+      "t_start": 0.0,
+      "t_end": 1.5,
+      "regions": {
+        "visual": 0.6842362601663484,
+        "language": 0.36742423485546005,
+        "reward_novelty": 0.7495011839309573,
+        "memory_familiarity": 0.7439777836079287,
+        "emotional_arousal": 0.6593256376586616,
+        "attention_salience": 0.782843666711909
+      }
+    },
+    {
+      "t_start": 1.5,
+      "t_end": 3.0,
+      "regions": {
+        "visual": 0.6542602475693758,
+        "language": 0.3224536401509186,
+        "reward_novelty": 0.36709776801070215,
+        "memory_familiarity": 0.5498021458222907,
+        "emotional_arousal": 0.608674349150918,
+        "attention_salience": 0.4073665103155291
+      }
+    },
+    {
+      "t_start": 3.0,
+      "t_end": 4.5,
+      "regions": {
+        "visual": 0.4594595251008843,
+        "language": 0.5020675019802231,
+        "reward_novelty": 0.24864037871462344,
+        "memory_familiarity": 0.30154861102436215,
+        "emotional_arousal": 0.36460780704533163,
+        "attention_salience": 0.25320520865823704
+      }
+    },
+    {
+      "t_start": 4.5,
+      "t_end": 5.09,
+      "regions": {
+        "visual": 0.13477309551271963,
+        "language": 0.859668654579335,
+        "reward_novelty": 0.6375008204087604,
+        "memory_familiarity": 0.3422020681411927,
+        "emotional_arousal": 0.3426552098679225,
+        "attention_salience": 0.49335346083005593
+      }
+    }
+  ]
+}
