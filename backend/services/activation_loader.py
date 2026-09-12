@@ -7,6 +7,7 @@ Its only input is a JSON file on disk in the agreed shape.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from ..config import settings
@@ -70,5 +71,54 @@ def list_available_videos() -> list[str]:
     ids: set[str] = set()
     for d in (settings.ACTIVATION_DATA_PATH, settings.ACTIVATION_FALLBACK_PATH):
         if d.exists():
-            ids.update(p.stem for p in d.glob("*.json"))
+            for p in d.glob("*.json"):
+                # Vertex-field sidecars live next to activations as `{id}_verts.json`.
+                if p.stem.endswith("_verts"):
+                    continue
+                ids.add(p.stem)
+            for p in d.glob("*_preds.npz"):
+                ids.add(p.stem[: -len("_preds")])
     return sorted(ids)
+
+
+_JUNK = (
+    ".savetube.vip",
+    ".savetube",
+    "-ad-ytmp4",
+    "_ad_ytmp4",
+    "-ytmp4",
+    "-ad-yt",
+)
+
+
+def normalize_video_id(raw: str) -> str:
+    """Strip download-site junk so a Kaggle VIDEO_ID still matches the mp4."""
+    s = Path(raw).stem.lower().replace(" ", "_")
+    s = re.sub(r"[\s._-]*\(\d+\)$", "", s)
+    for junk in _JUNK:
+        s = s.replace(junk, "")
+    return re.sub(r"[-_.]+$", "", s)
+
+
+def resolve_tribe_id(uploaded: str, known: list[str]) -> str | None:
+    """Map an uploaded filename onto a preloaded Kaggle VIDEO_ID."""
+    if not known:
+        return None
+    u = normalize_video_id(uploaded)
+    exact = {normalize_video_id(k): k for k in known}
+    if u in exact:
+        return exact[u]
+    for kn, original in exact.items():
+        if u.startswith(kn) or kn.startswith(u):
+            return original
+    best: str | None = None
+    best_n = 11
+    for kn, original in exact.items():
+        n = 0
+        for a, b in zip(u, kn):
+            if a != b:
+                break
+            n += 1
+        if n > best_n:
+            best, best_n = original, n
+    return best

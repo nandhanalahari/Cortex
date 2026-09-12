@@ -1,0 +1,4 @@
+# Drop both Cell 6 downloads here:
+#   {VIDEO_ID}.json
+#   {VIDEO_ID}_preds.npz
+# The backend moves them into data/activations/ and converts the NPZ.

@@ -46,3 +46,14 @@ export interface Selection {
   t_start: number;
   t_end: number;
 }
+
+export interface VertexField {
+  video_id: string;
+  n_vertices: number;
+  n_frames: number;
+  times: number[];
+  mean: number[];
+  peak: number[];
+  frames: number[][];
+  source?: string;
+}

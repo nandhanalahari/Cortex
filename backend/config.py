@@ -34,6 +34,7 @@ class Settings:
     ACTIVATION_FALLBACK_PATH: Path = _resolve("./data/precomputed")
 
     VIDEO_DATA_PATH: Path = _resolve(os.getenv("VIDEO_DATA_PATH", "./data/videos"))
+    KAGGLE_INBOX_PATH: Path = _resolve(os.getenv("KAGGLE_INBOX_PATH", "./data/kaggle_inbox"))
     WORKSPACE_PATH: Path = _resolve(os.getenv("WORKSPACE_PATH", "./backend/workspace"))
     OUTPUT_PATH: Path = _resolve(os.getenv("OUTPUT_PATH", "./data/outputs"))
 
@@ -68,7 +69,8 @@ class Settings:
 
     def ensure_dirs(self) -> None:
         for d in (self.ACTIVATION_DATA_PATH, self.ACTIVATION_FALLBACK_PATH,
-                  self.VIDEO_DATA_PATH, self.WORKSPACE_PATH, self.OUTPUT_PATH):
+                  self.VIDEO_DATA_PATH, self.KAGGLE_INBOX_PATH,
+                  self.WORKSPACE_PATH, self.OUTPUT_PATH):
             d.mkdir(parents=True, exist_ok=True)
 
 

@@ -1,4 +1,4 @@
-import type { Curve, RedoResponse, SelectResponse } from "./types";
+import type { Curve, RedoResponse, SelectResponse, VertexField } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -15,7 +15,12 @@ async function json<T>(res: Response): Promise<T> {
 
 export const api = {
   listVideos: () =>
-    fetch("/api/videos").then((r) => json<{ videos: string[] }>(r)),
+    fetch("/api/videos").then((r) =>
+      json<{
+        videos: string[];
+        items?: { id: string; has_activation: boolean; has_verts: boolean; has_video: boolean }[];
+      }>(r),
+    ),
 
   loadActivation: (videoId: string) =>
     fetch(`/api/videos/${videoId}/load-activation`, { method: "POST" }).then((r) =>
@@ -26,26 +31,6 @@ export const api = {
     fetch(`/api/videos/${videoId}/curve`).then((r) => json<Curve>(r)),
 
   sourceUrl: (videoId: string) => `/api/videos/${videoId}/source`,
-
-  brainHeatmap: (videoId: string) =>
-    fetch(`/api/videos/${videoId}/brain-heatmap`)
-      .then((r) => {
-        if (!r.ok) return null;
-        return r.arrayBuffer();
-      })
-      .then((buf) => {
-        if (!buf) return null;
-        const header = new Uint32Array(buf, 0, 2);
-        const nWindows = header[0];
-        const nVerts = header[1];
-        const starts = new Float32Array(buf, 8, nWindows);
-        const data = new Float32Array(buf, 8 + nWindows * 4, nWindows * nVerts);
-        const windows: Float32Array[] = [];
-        for (let i = 0; i < nWindows; i++) {
-          windows.push(data.subarray(i * nVerts, (i + 1) * nVerts));
-        }
-        return { nWindows, nVerts, starts: Array.from(starts), windows };
-      }),
 
   redo: (videoId: string, t_start: number, t_end: number) =>
     fetch(`/api/videos/${videoId}/segments/redo`, {
@@ -72,10 +57,21 @@ export const api = {
       .then((r) => json<{ status: string; video_id: string; windows: number; duration_sec: number }>(r));
   },
 
-  uploadVideo: (file: File) => {
+  uploadVideo: (file: File, videoId?: string | null) => {
     const form = new FormData();
     form.append("file", file);
+    if (videoId) form.append("video_id", videoId);
     return fetch("/api/videos/upload-video", { method: "POST", body: form })
-      .then((r) => json<{ status: string; video_id: string; matched_activation_id: string | null; size_mb: number; has_activation: boolean }>(r));
+      .then((r) => json<{ status: string; video_id: string; size_mb: number; has_activation: boolean; has_verts: boolean }>(r));
   },
+
+  uploadPreds: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch("/api/videos/upload-preds", { method: "POST", body: form })
+      .then((r) => json<{ status: string; video_id: string; n_vertices: number; n_frames: number }>(r));
+  },
+
+  getVerts: (videoId: string) =>
+    fetch(`/api/videos/${videoId}/verts`).then((r) => json<VertexField>(r)),
 };
