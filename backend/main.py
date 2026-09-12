@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from .api.auth import router as auth_router
 from .api.videos import router as videos_router
 from .config import settings
 
@@ -53,4 +54,5 @@ def media(filename: str):
     raise HTTPException(status_code=404, detail="Media not found.")
 
 
+app.include_router(auth_router)
 app.include_router(videos_router)

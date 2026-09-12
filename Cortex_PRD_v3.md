@@ -27,7 +27,7 @@ Cortex lets a user upload a short video ad, see a real predicted brain-engagemen
 | Compute host for TRIBE v2 | **Vultr** (A40/L40S GPU instance) | Hosts the one-time-per-video inference pass | Exploratory (core can run on any available GPU/Colab if Vultr setup stalls) |
 | Marketing interpretation | **Gemini API** (multimodal) | Watches the user-selected weak segment, writes a positive + negative prompt pair | Core |
 | Video/audio regeneration | **ElevenLabs** (video generation platform: access to Veo, Sora, Kling, Seedance, Wan, etc. + native voice/music/SFX) | Generates 2-3 candidate redone versions of the selected segment from Gemini's prompt pair | Core |
-| Storage / system of record | **TigerData** | Consent logs (if built), activation vectors, edit-attempt history | Exploratory |
+| Storage / system of record + creative memory | **TigerData** | Stores activation vectors, edit-attempt history, and per-segment content embeddings (pgvector); powers similarity lookups so the redo loop knows what's already been tried | Exploratory |
 
 **Explicitly not used:** Redis, Pika (Percept's own stack for these roles is replaced by TigerData and ElevenLabs' native video generation respectively).
 
@@ -47,7 +47,7 @@ Cortex lets a user upload a short video ad, see a real predicted brain-engagemen
 - C9: User exports/downloads the final video
 
 ### EXPLORATORY (attempt only after Core is fully working and demo-safe)
-- E1: TigerData as the system of record (replacing flat JSON/local storage)
+- E1: **TigerData Creative Memory** — every generated candidate segment is stored with an embedding of its content/direction alongside its (derived) engagement data. Before/after a redo request, Cortex queries TigerData for past segments similar to the current one and surfaces their outcomes — so repeated regenerations aren't blind. Replaces flat JSON storage as the system of record for segment history.
 - E2: Vultr-hosted TRIBE v2 backend (replacing any interim Colab/rented-GPU setup)
 - E3: Consent Gateway — biometric face/voice matching against a consent DB before analysis runs on any video with a recognizable person (explicitly framed as a responsible-AI pattern demo, not certified compliance)
 - E4: Demographic-aware critique (Gemini re-interpreting the same TRIBE v2 data per age bracket) — deferred from earlier design discussion, revisit only if Core + E1-E3 are done early
@@ -142,6 +142,15 @@ Cortex lets a user upload a short video ad, see a real predicted brain-engagemen
         +-------------------------------------------------+
                                 |
                                 v
+        +-------------------------------------------------+
+        |  [EXPLORATORY] Creative Memory Service            |
+        |  embeds each candidate segment (prompt + content)  |
+        |  --> stores in TigerData (pgvector)                |
+        |  --> queries for similar past segments + outcomes  |
+        |  --> attaches results to candidate preview payload |
+        +-------------------------------------------------+
+                                |
+                                v
                   [Frontend: candidate preview + selection]
                                 |
                      (3) user picks favorite
@@ -199,7 +208,7 @@ Triggers or retrieves the (precomputed/cached) TRIBE v2 result.
 ```json
 { "t_start": 4.0, "t_end": 7.0 }
 ```
-**Backend behavior:** extracts segment → sends to Gemini → sends result to ElevenLabs → returns candidates.
+**Backend behavior:** extracts segment → sends to Gemini → sends result to ElevenLabs → returns candidates. In parallel [EXPLORATORY], embeds the segment and queries TigerData for similar past segments; `similar_segments` is attached if the lookup resolves, and omitted if it doesn't (it must never block the candidates).
 **Response:**
 ```json
 {
@@ -210,9 +219,19 @@ Triggers or retrieves the (precomputed/cached) TRIBE v2 result.
     { "candidate_id": "cand_1", "preview_url": "..." },
     { "candidate_id": "cand_2", "preview_url": "..." },
     { "candidate_id": "cand_3", "preview_url": "..." }
+  ],
+  "similar_segments": [
+    {
+      "segment_id": "seg_12",
+      "similarity": 0.87,
+      "positive_prompt": "Show the product within the first second, upbeat pacing.",
+      "selected_candidate_id": "cand_2",
+      "engagement_score": 0.74
+    }
   ]
 }
 ```
+*`similar_segments` is [EXPLORATORY] — Core ships this response without that key.*
 
 ### 6.4 `POST /api/videos/{video_id}/segments/{segment_id}/select`
 **Request:**
@@ -263,6 +282,16 @@ Segment {
   selected_candidate_id
 }
 
+CreativeMemory {   // [EXPLORATORY]
+  id, video_id, segment_id,
+  embedding,              // vector, pgvector column
+  positive_prompt, negative_prompt,
+  selected_candidate_id,  // null if none chosen yet / discarded
+  engagement_score,       // from the composite curve, if available
+  created_at
+}
+
+
 ConsentRecord {   // [EXPLORATORY]
   id, video_id, identity_id, match_status, verification_method, resolved_at
 }
@@ -293,6 +322,7 @@ ConsentRecord {   // [EXPLORATORY]
       engagement_curve.py        <- builds composite score from raw output
       gemini_service.py          <- multimodal segment analysis -> prompt pair
       elevenlabs_service.py      <- video generation calls
+      memory_service.py          <- [EXPLORATORY] embeds segments, writes/queries TigerData
       ffmpeg_service.py          <- extract + splice
       consent_service.py         <- [EXPLORATORY]
     /models
@@ -396,6 +426,8 @@ CONSENT_SMS_PROVIDER_KEY=      # [EXPLORATORY, can be mocked]
 | TRIBE v2 / Vultr GPU setup delays | Get inference working on any GPU Friday night; Vultr migration is Phase 2, not a blocker |
 | Gemini/ElevenLabs live latency during demo | Pre-generate and cache full walkthroughs (including all candidate segments) for locked demo videos as a guaranteed fallback |
 | Scope creep into demographic critique (E4) or Consent Gateway (E3) before Core is solid | Hard cut line at end of Section 10 — Core ships first, always |
+| Creative memory adds latency to the redo loop (embed + query on every request) | Run the similarity lookup async/in parallel with the ElevenLabs generation call, not serially before it — attach results when both resolve |
+| Not enough segments generated during the hackathon for similarity search to feel meaningful in the demo | Pre-seed TigerData with a handful of synthetic/precomputed segment embeddings for the locked demo video(s) before presenting, so the first live query already has real matches to return |
 
 ---
 

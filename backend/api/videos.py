@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import json
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from .auth import get_optional_user
 from ..config import REPO_ROOT, settings
 from ..models import (
     ActivationData,
@@ -20,17 +23,37 @@ from ..models import (
     RedoResponse,
     SelectRequest,
     SelectResponse,
+    SimilarSegment,
 )
 from ..services import (
     activation_loader,
     elevenlabs_service,
     ffmpeg_service,
     gemini_service,
+    memory_service,
 )
 from ..services.engagement_curve import attach_scores, build_curve
 from ..store import SegmentRecord, store
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
+
+
+def _segment_engagement(video_id: str, t_start: float, t_end: float) -> float | None:
+    """Mean engagement over the windows this segment covers, for creative memory.
+
+    None whenever the activation isn't available - the memory row is still
+    worth keeping without a score.
+    """
+    try:
+        curve = build_curve(activation_loader.load_activation(video_id))
+    except Exception:  # noqa: BLE001 - a missing curve must not fail a splice
+        return None
+    covered = [
+        s.engagement_score
+        for s in curve.scores
+        if s.t_end > t_start and s.t_start < t_end
+    ]
+    return sum(covered) / len(covered) if covered else None
 
 
 @router.get("")
@@ -170,7 +193,11 @@ def get_source_video(video_id: str):
 
 
 @router.post("/{video_id}/segments/redo", response_model=RedoResponse)
-def redo_segment(video_id: str, req: RedoRequest) -> RedoResponse:
+def redo_segment(
+    video_id: str,
+    req: RedoRequest,
+    user=Depends(get_optional_user),
+) -> RedoResponse:
     """F5-F7: extract segment -> Gemini prompt pair -> ElevenLabs candidates."""
     if req.t_end <= req.t_start:
         raise HTTPException(status_code=400, detail="t_end must be greater than t_start.")
@@ -183,15 +210,25 @@ def redo_segment(video_id: str, req: RedoRequest) -> RedoResponse:
 
     positive, negative = gemini_service.analyze_segment(segment_path, req.t_start, req.t_end)
 
-    generated = elevenlabs_service.generate_candidates(
-        positive_prompt=positive,
-        negative_prompt=negative,
-        seed_frame=seed_frame,
-        segment_path=segment_path,
-        duration=req.t_end - req.t_start,
-    )
-    if not generated:
-        raise HTTPException(status_code=502, detail="No candidate segments were produced.")
+    # E1: the creative-memory lookup rides alongside generation rather than
+    # gating it (PRD Section 13) - ElevenLabs is the long pole either way.
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        memory_future = pool.submit(memory_service.find_similar, positive, negative)
+
+        generated = elevenlabs_service.generate_candidates(
+            positive_prompt=positive,
+            negative_prompt=negative,
+            seed_frame=seed_frame,
+            segment_path=segment_path,
+            duration=req.t_end - req.t_start,
+        )
+        if not generated:
+            raise HTTPException(status_code=502, detail="No candidate segments were produced.")
+
+        similar = memory_service.collect_similar(memory_future)
+    finally:
+        pool.shutdown(wait=False)
 
     segment_id = store.new_segment_id()
     rec = SegmentRecord(
@@ -208,12 +245,16 @@ def redo_segment(video_id: str, req: RedoRequest) -> RedoResponse:
         rec.candidates[g.candidate_id] = g.path
         candidates.append(Candidate(candidate_id=g.candidate_id, preview_url=f"/media/{g.path.name}"))
     store.put_segment(rec)
+    memory_service.remember(
+        segment_id, video_id, positive, negative, user_id=user.id if user else None
+    )
 
     return RedoResponse(
         segment_id=segment_id,
         positive_prompt=positive,
         negative_prompt=negative,
         candidates=candidates,
+        similar_segments=[SimilarSegment(**hit.__dict__) for hit in similar],
     )
 
 
@@ -234,6 +275,9 @@ def select_candidate(video_id: str, segment_id: str, req: SelectRequest) -> Sele
         raise HTTPException(status_code=500, detail=f"ffmpeg splice: {exc}") from exc
 
     store.set_spliced(video_id, spliced)
+    memory_service.record_outcome(
+        segment_id, req.candidate_id, _segment_engagement(video_id, rec.t_start, rec.t_end)
+    )
     return SelectResponse(video_id=video_id, status="spliced", preview_url=f"/media/{spliced.name}")
 
 
