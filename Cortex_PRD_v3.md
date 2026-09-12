@@ -1,4 +1,4 @@
-# Product Requirements Document
+# PRD - Product Requirements Documens
 ## Cortex — Predictive Brain-Engagement Video Optimizer
 
 **Version:** 3.0 (Engineering Spec — Cursor-Ready)
