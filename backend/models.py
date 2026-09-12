@@ -49,11 +49,23 @@ class Candidate(BaseModel):
     preview_url: str
 
 
+class SimilarSegment(BaseModel):
+    """A past redo whose creative direction resembles this one (E1)."""
+
+    segment_id: str
+    similarity: float
+    positive_prompt: str
+    selected_candidate_id: Optional[str] = None
+    engagement_score: Optional[float] = None
+
+
 class RedoResponse(BaseModel):
     segment_id: str
     positive_prompt: str
     negative_prompt: str
     candidates: List[Candidate]
+    # [EXPLORATORY] Empty whenever memory is off, cold, or too slow to matter.
+    similar_segments: List[SimilarSegment] = Field(default_factory=list)
 
 
 class SelectRequest(BaseModel):
@@ -64,3 +76,27 @@ class SelectResponse(BaseModel):
     video_id: str
     status: str
     preview_url: str
+
+
+# ---- Auth (login system, backed by TigerData) ----
+
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str = Field(..., min_length=8)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    created_at: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: UserOut

@@ -44,6 +44,21 @@ class Settings:
     ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "")
     ELEVENLABS_VIDEO_MODEL: str = os.getenv("ELEVENLABS_VIDEO_MODEL", "")
 
+    # --- TigerData Creative Memory (E1, EXPLORATORY) ---
+    # Unset -> memory falls back to an in-process store; nothing else changes.
+    # TIGER_DATABASE_URL is what's actually provisioned in .env; accept the
+    # documented name too so .env.example instructions still work verbatim.
+    TIGERDATA_CONNECTION_STRING: str = os.getenv("TIGER_DATABASE_URL") or os.getenv(
+        "TIGERDATA_CONNECTION_STRING", ""
+    )
+    GEMINI_EMBED_MODEL: str = os.getenv("GEMINI_EMBED_MODEL", "text-embedding-004")
+    MEMORY_TOP_K: int = int(os.getenv("MEMORY_TOP_K", "3"))
+    # Hard ceiling on the parallel lookup; candidates ship regardless.
+    MEMORY_LOOKUP_TIMEOUT_SEC: float = float(os.getenv("MEMORY_LOOKUP_TIMEOUT_SEC", "3"))
+
+    # --- Login (email + password, backed by TigerData) ---
+    SESSION_TTL_DAYS: int = int(os.getenv("SESSION_TTL_DAYS", "7"))
+
     # --- Demo safety ---
     OFFLINE_MODE: bool = os.getenv("OFFLINE_MODE", "false").lower() in {"1", "true", "yes"}
 
