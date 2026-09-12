@@ -90,12 +90,15 @@ def region_timeseries(
     preds: np.ndarray,
     masks: dict[str, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
-    """Mean activity per macro-region over time. preds: (T, V)."""
+    """Mean activity per macro-region over time. preds: (T, V).
+
+    Without ``masks`` the six names are NOT anatomical — vertices are split into
+    contiguous bands, which is only meaningful for wiring/UI tests.
+    """
     if preds.ndim != 2:
         raise ValueError(f"preds must be (T, V), got {preds.shape}")
 
     if masks is None:
-        # Fallback: split cortex into 6 contiguous bands (demo / no atlas).
         t, v = preds.shape
         band = max(v // 6, 1)
         out = {}
@@ -177,12 +180,6 @@ def windows_from_preds(
         segment_starts = np.asarray(segment_starts, dtype=np.float64)
 
     series = region_timeseries(preds, masks=masks)
-    # Global engagement = mean of attention + reward + emotional (marketing proxy).
-    global_curve = (
-        series["attention_salience"]
-        + series["reward_novelty"]
-        + series["emotional_arousal"]
-    ) / 3.0
 
     if window_sec is None:
         windows = []
@@ -195,16 +192,11 @@ def windows_from_preds(
                 k: float(1.0 / (1.0 + np.exp(-_safe_z(series[k])[i])))
                 for k in REGION_KEYS
             }
-            feat = composite_engagement(global_curve[max(0, i - 2) : i + 3])
             windows.append(
                 {
                     "t_start": t0,
                     "t_end": t1,
                     "regions": regions,
-                    "engagement_score": float(
-                        1.0 / (1.0 + np.exp(-_safe_z(global_curve)[i]))
-                    ),
-                    "shape": feat,
                 }
             )
         return windows
@@ -214,7 +206,6 @@ def windows_from_preds(
     windows = []
     t_cursor = 0.0
     z_regions = {k: _safe_z(series[k]) for k in REGION_KEYS}
-    z_global = _safe_z(global_curve)
 
     while t_cursor < duration - 1e-6:
         t_end = min(t_cursor + window_sec, duration)
@@ -229,15 +220,11 @@ def windows_from_preds(
             k: float(1.0 / (1.0 + np.exp(-float(np.mean(z_regions[k][idxs])))))
             for k in REGION_KEYS
         }
-        eng = float(1.0 / (1.0 + np.exp(-float(np.mean(z_global[idxs])))))
-        feat = composite_engagement(global_curve[idxs])
         windows.append(
             {
                 "t_start": float(t_cursor),
                 "t_end": float(t_end),
                 "regions": regions,
-                "engagement_score": eng,
-                "shape": feat,
             }
         )
         t_cursor = t_end
@@ -254,7 +241,7 @@ def activation_payload(
     masks: dict[str, np.ndarray] | None = None,
     window_sec: float = 1.5,
 ) -> dict[str, Any]:
-    """PRD §6.2 response body."""
+    """PM handoff / activation JSON: video_id, duration_sec, windows[{t_start,t_end,regions}]."""
     windows = windows_from_preds(
         preds,
         segment_starts,
@@ -267,7 +254,5 @@ def activation_payload(
     return {
         "video_id": video_id,
         "duration_sec": float(duration_sec),
-        "tr_sec": tr,
-        "n_vertices": int(preds.shape[1]) if preds.ndim == 2 else 0,
         "windows": windows,
     }

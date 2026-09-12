@@ -56,11 +56,20 @@ try:
     valid = set(get_hcp_labels(mesh="fsaverage5", combine=False, hemi="both").keys())
     masks = {}
     for region, parcels in REGION_PARCELS.items():
+        missing = [p for p in parcels if p not in valid]
+        if missing:
+            print(f"[roi] {region}: dropped unknown parcels {missing}")
         idxs = [get_hcp_roi_indices(p, hemi="both", mesh="fsaverage5") for p in parcels if p in valid]
         masks[region] = np.unique(np.concatenate(idxs))
-    print("ROI: HCP-MMP")
+    print("ROI grouping: HCP-MMP via tribev2.utils")
 except Exception as e:
-    print("ROI fallback", e)
+    import os
+    if os.environ.get("CORTEX_ALLOW_BAND_FALLBACK") != "1":
+        raise RuntimeError(
+            "HCP-MMP atlas unavailable, so the six region names would not be anatomical. "
+            "Fix the mne atlas download, or set CORTEX_ALLOW_BAND_FALLBACK=1 for placeholders."
+        ) from e
+    print("WARNING: band fallback — region names are NOT anatomical:", e)
     masks = None
 
 keys = list(REGION_PARCELS.keys())
@@ -97,32 +106,28 @@ while t0 < duration - 1e-6 and len(starts_arr):
         m = np.zeros(len(starts_arr), dtype=bool); m[idx] = True
     idxs = np.where(m)[0]
     windows.append({
-        "t_start": float(t0), "t_end": float(t1),
+        "t_start": float(t0),
+        "t_end": float(t1),
         "regions": {k: sigmoid(float(np.mean(z_regions[k][idxs]))) for k in z_regions},
-        "engagement_score": sigmoid(float(np.mean(z_global[idxs]))),
     })
     t0 = t1
 
+# PM handoff schema — exact fields only
 payload = {
     "video_id": VIDEO_ID,
-    "duration_sec": duration,
-    "tr_sec": tr,
-    "n_vertices": int(preds.shape[1]),
+    "duration_sec": float(duration),
     "windows": windows,
-    "meta": {
-        "n_timesteps": int(preds.shape[0]),
-        "device": "cuda",
-        "n_gpus": int(torch.cuda.device_count()),
-        "source_video": VIDEO_PATH.name,
-        "host": "kaggle",
-    },
 }
 np.savez_compressed(OUT_DIR / f"{VIDEO_ID}_preds.npz", preds=preds.astype(np.float32), starts=starts_arr.astype(np.float32))
 json_path = OUT_DIR / f"{VIDEO_ID}.json"
 json_path.write_text(json.dumps(payload, indent=2))
 print("SUCCESS", json_path)
 for w in windows[:8]:
-    print(f"  [{w['t_start']:.1f}-{w['t_end']:.1f}] eng={w['engagement_score']:.3f}")
+    r = w["regions"]
+    print(
+        f"  [{w['t_start']:.1f}-{w['t_end']:.1f}] "
+        f"vis={r['visual']:.3f} attn={r['attention_salience']:.3f}"
+    )
 '''
 
 
@@ -392,36 +397,76 @@ if proc.returncode != 0:
 
 json_path = Path("/kaggle/working/activations") / f"{VIDEO_ID}.json"
 assert json_path.exists(), json_path
-print("DONE →", json_path, "bytes", json_path.stat().st_size)
+print("DONE on Kaggle VM →", json_path.resolve())
+print("bytes", json_path.stat().st_size)
+print("Re-run Cell 6 for plot + browser download buttons (ignore Cursor FileLink).")
 '''
 
-cell6 = '''# ===== Cell 6: plot + download =====
+cell6 = '''# ===== Cell 6: plot + REAL download (Cursor FileLink is broken for remote Kaggle) =====
+import base64
 import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from IPython.display import FileLink, display
+from IPython.display import HTML, display
 
 assert "VIDEO_ID" in dir(), "Run Cells 4–5 first"
-json_path = Path("/kaggle/working/activations") / f"{VIDEO_ID}.json"
+
+OUT = Path("/kaggle/working/activations")
+json_path = OUT / f"{VIDEO_ID}.json"
+npz_path = OUT / f"{VIDEO_ID}_preds.npz"
+
+print("Looking on Kaggle VM (NOT your Mac):")
+for path in (json_path, npz_path):
+    if path.exists():
+        print(f"  OK  {path}  ({path.stat().st_size:,} bytes)")
+    else:
+        print(f"  MISSING  {path}")
+
+if not json_path.exists():
+    raise FileNotFoundError(
+        f"Inference output not found at {json_path}. "
+        "Re-run Cell 5 and check it printed DONE → ..."
+    )
+
 payload = json.loads(json_path.read_text())
 windows = payload["windows"]
+print("\\nSchema check:")
+print("  top keys:", list(payload.keys()))
+print("  n_windows:", len(windows))
+print("  first window:", json.dumps(windows[0], indent=2) if windows else None)
 
 ts = [0.5 * (w["t_start"] + w["t_end"]) for w in windows]
-ys = [w["engagement_score"] for w in windows]
-
+ys = [float(sum(w["regions"].values()) / max(len(w["regions"]), 1)) for w in windows]
 plt.figure(figsize=(10, 3))
 plt.plot(ts, ys, color="#1f6feb", lw=2)
 plt.fill_between(ts, ys, alpha=0.2, color="#1f6feb")
 plt.xlabel("time (s)")
-plt.ylabel("engagement")
+plt.ylabel("mean region activation")
 plt.title(f"Cortex / TRIBE — {VIDEO_ID}")
 plt.tight_layout()
 plt.show()
 
-display(FileLink(f"activations/{VIDEO_ID}.json"))
-display(FileLink(f"activations/{VIDEO_ID}_preds.npz"))
-print("Copy JSON into Cortex: data/activations/")
+def download_button(path: Path, label: str):
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    href = f"data:application/octet-stream;base64,{data}"
+    return HTML(
+        f'<p><a download="{path.name}" href="{href}" '
+        f'style="font-size:16px;padding:8px 12px;background:#1f6feb;color:white;'
+        f'text-decoration:none;border-radius:6px;">{label}</a> '
+        f'<code>{path}</code> ({path.stat().st_size:,} bytes)</p>'
+    )
+
+display(HTML("<h3>Download from Kaggle VM</h3>"))
+display(download_button(json_path, f"Download {json_path.name}"))
+if npz_path.exists():
+    if npz_path.stat().st_size < 40_000_000:
+        display(download_button(npz_path, f"Download {npz_path.name}"))
+    else:
+        print(f"NPZ is large ({npz_path.stat().st_size:,} bytes) — use Kaggle Output pane.")
+
+print("\\nAfter download → put JSON in Cortex/data/activations/ (e.g. demo_1.json)")
+print("Do NOT use Cursor FileLink 'activations/...' — that creates empty local stubs.")
 '''
 
 cell1 = '''# ===== Cell 1: GPU + HF auth =====

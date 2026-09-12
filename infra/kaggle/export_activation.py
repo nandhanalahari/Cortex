@@ -94,13 +94,7 @@ def to_windows(preds, starts, tr=1.0, masks=None, window_sec=1.5, duration=None)
     t = preds.shape[0]
     starts = np.asarray(starts if len(starts) == t else np.arange(t) * tr, dtype=np.float64)
     series = region_means(preds, masks)
-    global_curve = (
-        series["attention_salience"]
-        + series["reward_novelty"]
-        + series["emotional_arousal"]
-    ) / 3.0
     z_regions = {k: _safe_z(series[k]) for k in series}
-    z_global = _safe_z(global_curve)
     if duration is None:
         duration = float(starts[-1] + tr) if t else 0.0
 
@@ -115,13 +109,11 @@ def to_windows(preds, starts, tr=1.0, masks=None, window_sec=1.5, duration=None)
             mask[idx] = True
         idxs = np.where(mask)[0]
         regions = {k: _sigmoid(float(np.mean(z_regions[k][idxs]))) for k in z_regions}
-        eng = _sigmoid(float(np.mean(z_global[idxs])))
         windows.append(
             {
                 "t_start": float(t_cursor),
                 "t_end": float(t_end),
                 "regions": regions,
-                "engagement_score": eng,
             }
         )
         t_cursor = t_end
@@ -171,8 +163,15 @@ def run_inference(
 
     try:
         masks = build_masks()
+        print("ROI grouping: HCP-MMP via tribev2.utils")
     except Exception as exc:
-        print("ROI mask build failed, using band fallback:", exc)
+        if os.environ.get("CORTEX_ALLOW_BAND_FALLBACK") != "1":
+            raise RuntimeError(
+                "HCP-MMP atlas unavailable, so the six region names would not be "
+                "anatomical. Fix the mne atlas download, or set "
+                "CORTEX_ALLOW_BAND_FALLBACK=1 to export placeholder groupings."
+            ) from exc
+        print("WARNING: band fallback — region names are NOT anatomical:", exc)
         masks = None
 
     duration = None
@@ -187,19 +186,11 @@ def run_inference(
     windows, duration = to_windows(
         preds, starts, tr=tr, masks=masks, window_sec=window_sec, duration=duration
     )
+    # PM handoff schema — exact fields only
     payload = {
         "video_id": video_id,
-        "duration_sec": duration,
-        "tr_sec": tr,
-        "n_vertices": int(preds.shape[1]),
+        "duration_sec": float(duration),
         "windows": windows,
-        "meta": {
-            "n_timesteps": int(preds.shape[0]),
-            "device": device,
-            "n_gpus": int(torch.cuda.device_count()),
-            "source_video": video_path.name,
-            "host": "kaggle" if os.environ.get("KAGGLE_KERNEL_RUN_TYPE") else "local",
-        },
     }
 
     out = Path(out_dir)
@@ -214,12 +205,11 @@ def run_inference(
     with json_path.open("w") as f:
         json.dump(payload, f, indent=2)
     print("Wrote", json_path)
-    print("Engagement preview:")
     for w in windows[:5]:
+        r = w["regions"]
         print(
             f"  [{w['t_start']:.1f}-{w['t_end']:.1f}] "
-            f"score={w['engagement_score']:.3f} "
-            f"attn={w['regions']['attention_salience']:.3f}"
+            f"vis={r['visual']:.3f} attn={r['attention_salience']:.3f}"
         )
     return payload
 
