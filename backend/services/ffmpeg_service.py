@@ -36,6 +36,14 @@ def _new_path(suffix: str) -> Path:
     return settings.WORKSPACE_PATH / f"{uuid.uuid4().hex}{suffix}"
 
 
+def has_source(video_id: str) -> bool:
+    """True when a source clip exists for this video_id."""
+    for ext in (".mp4", ".mov", ".webm", ".mkv"):
+        if (settings.VIDEO_DATA_PATH / f"{video_id}{ext}").exists():
+            return True
+    return False
+
+
 def source_video_path(video_id: str) -> Path:
     """Locate the source demo video by id (tries common extensions)."""
     for ext in (".mp4", ".mov", ".webm", ".mkv"):

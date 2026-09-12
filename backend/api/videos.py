@@ -9,7 +9,7 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from ..config import settings
@@ -28,6 +28,7 @@ from ..services import (
     gemini_service,
 )
 from ..services.engagement_curve import attach_scores, build_curve
+from ..services import vertex_field
 from ..store import SegmentRecord, store
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -36,7 +37,18 @@ router = APIRouter(prefix="/api/videos", tags=["videos"])
 @router.get("")
 def list_videos() -> dict:
     """List demo videos that have a precomputed activation JSON available."""
-    return {"videos": activation_loader.list_available_videos()}
+    vertex_field.ingest_kaggle_exports()
+    ids = activation_loader.list_available_videos()
+    items = [
+        {
+            "id": vid,
+            "has_activation": True,
+            "has_verts": vertex_field.has_verts(vid) or vertex_field.ensure_verts(vid) is not None,
+            "has_video": ffmpeg_service.has_source(vid),
+        }
+        for vid in ids
+    ]
+    return {"videos": ids, "items": items}
 
 
 # ── Upload endpoints (Kaggle output → local storage) ──────────────────
@@ -85,10 +97,15 @@ async def upload_activation(file: UploadFile = File(...)) -> dict:
 
 
 @router.post("/upload-video")
-async def upload_video(file: UploadFile = File(...)) -> dict:
+async def upload_video(
+    file: UploadFile = File(...),
+    video_id: str | None = Form(None),
+) -> dict:
     """Upload a video file to pair with its activation JSON.
 
-    The filename (minus extension) becomes the video_id, matching the activation JSON.
+    If ``video_id`` is sent (from a JSON/NPZ already uploaded), the file is
+    saved under that id so playback matches TRIBE output even when the
+    mp4 filename differs.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided.")
@@ -98,22 +115,70 @@ async def upload_video(file: UploadFile = File(...)) -> dict:
     if ext not in allowed:
         raise HTTPException(status_code=400, detail=f"Allowed formats: {', '.join(allowed)}")
 
-    video_id = Path(file.filename).stem
+    vertex_field.ingest_kaggle_exports()
+    raw_id = (video_id or "").strip() or Path(file.filename).stem
+    known = activation_loader.list_available_videos()
+    video_id = activation_loader.resolve_tribe_id(raw_id, known) or raw_id
     dest = settings.VIDEO_DATA_PATH / f"{video_id}.mp4"
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     with dest.open("wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # Auto-pair: does TRIBE v2 already have an activation JSON for this video?
+    vertex_field.ensure_verts(video_id)
     has_activation = video_id in activation_loader.list_available_videos()
+    has_verts = vertex_field.has_verts(video_id)
 
     return {
         "status": "ok",
         "video_id": video_id,
         "size_mb": round(dest.stat().st_size / 1024 / 1024, 2),
         "has_activation": has_activation,
+        "has_verts": has_verts,
     }
+
+
+@router.post("/upload-preds")
+async def upload_preds(file: UploadFile = File(...)) -> dict:
+    """Accept TRIBE v2's raw `{video_id}_preds.npz` (T × 20,484 vertices).
+
+    Converted to a compact vertex-field JSON the UI uses for Percept-style
+    per-vertex glow + lightning. Inference still never runs here.
+    """
+    if not file.filename or not file.filename.endswith(".npz"):
+        raise HTTPException(status_code=400, detail="File must be a .npz (TRIBE v2 preds).")
+
+    video_id = vertex_field.video_id_from_preds_name(file.filename)
+    dest = vertex_field.npz_path(video_id)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with dest.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    try:
+        payload = vertex_field.convert_npz(dest, video_id)
+    except vertex_field.VertexFieldError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "status": "ok",
+        "video_id": video_id,
+        "n_vertices": payload["n_vertices"],
+        "n_frames": payload["n_frames"],
+        "source": "kaggle_cloud_gpu",
+    }
+
+
+@router.get("/{video_id}/verts")
+def get_verts(video_id: str) -> dict:
+    """Per-vertex TRIBE field (0–255 × 20,484) plus spike-graph series."""
+    vertex_field.ingest_kaggle_exports()
+    payload = vertex_field.ensure_verts(video_id)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No vertex field for '{video_id}'. Drop the Kaggle _preds.npz into data/activations/.",
+        )
+    return payload
 
 
 @router.post("/{video_id}/load-activation")
@@ -152,7 +217,7 @@ def get_source_video(video_id: str):
         path = ffmpeg_service.source_video_path(video_id)
     except ffmpeg_service.FFmpegError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return FileResponse(path, media_type="video/mp4")
+    return FileResponse(path, media_type="video/mp4", filename=path.name)
 
 
 @router.post("/{video_id}/segments/redo", response_model=RedoResponse)

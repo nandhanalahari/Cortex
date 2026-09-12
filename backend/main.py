@@ -19,7 +19,12 @@ app = FastAPI(title="Cortex Interface", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -28,6 +33,9 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     settings.ensure_dirs()
+    from .services import vertex_field
+
+    vertex_field.ingest_kaggle_exports()
 
 
 @app.get("/api/health")
