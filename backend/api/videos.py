@@ -23,6 +23,7 @@ from ..models import (
     SelectRequest,
     SelectResponse,
     SimilarSegment,
+    Window,
 )
 from ..services import (
     activation_loader,
@@ -34,7 +35,13 @@ from ..services import (
     vertex_field,
 )
 from ..services.elevenlabs_service import GeneratedCandidate
-from ..services.engagement_curve import absolute_score, attach_scores, build_curve, weakest_span
+from ..services.engagement_curve import (
+    absolute_score,
+    attach_scores,
+    build_curve,
+    rescore_against,
+    weakest_span,
+)
 from ..store import SegmentRecord, store
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -441,7 +448,53 @@ def select_candidate(video_id: str, segment_id: str, req: SelectRequest) -> Sele
     memory_service.record_outcome(
         segment_id, req.candidate_id, _segment_engagement(video_id, rec.t_start, rec.t_end)
     )
-    return SelectResponse(video_id=video_id, status="spliced", preview_url=f"/media/{spliced.name}")
+    return SelectResponse(
+        video_id=video_id,
+        status="spliced",
+        preview_url=f"/media/{spliced.name}",
+        candidate_id=req.candidate_id,
+        t_start=rec.t_start,
+        t_end=rec.t_end,
+        windows=_spliced_windows(video_id, rec.t_start, rec.t_end, req.candidate_id),
+    )
+
+
+def _spliced_windows(
+    video_id: str, t_start: float, t_end: float, candidate_id: str
+) -> list[Window] | None:
+    """Activation windows for the spliced ad: the original's, with the replaced
+    span swapped for the take's own TRIBE windows on the original's scale.
+
+    None when the take has no usable TRIBE export - no curve is invented for it.
+    """
+    original = _activation_or_none(video_id)
+    library = candidate_library.find(video_id)
+    take = next((t for t in library.takes if t.candidate_id == candidate_id), None) if library else None
+    if original is None or take is None or take.activation is None:
+        return None
+    try:
+        take_data = ActivationData.model_validate(json.loads(take.activation.read_text(encoding="utf-8")))
+    except Exception:  # noqa: BLE001 - an unreadable export just means no curve
+        return None
+    rescored = rescore_against(take_data, original)
+    if rescored is None:
+        return None
+
+    seg = t_end - t_start
+    before = [
+        Window(t_start=w.t_start, t_end=min(w.t_end, t_start), regions=w.regions)
+        for w in original.windows if w.t_start < t_start
+    ]
+    # Only the take's opening `seg` seconds are spliced in (fit_to_duration).
+    inside = [
+        Window(t_start=t_start + w.t_start, t_end=t_start + min(w.t_end, seg), regions=w.regions)
+        for w in rescored if w.t_start < seg
+    ]
+    after = [
+        Window(t_start=max(w.t_start, t_end), t_end=w.t_end, regions=w.regions)
+        for w in original.windows if w.t_end > t_end
+    ]
+    return before + inside + after
 
 
 @router.get("/{video_id}/export")

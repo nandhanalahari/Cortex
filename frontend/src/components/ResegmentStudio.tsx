@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { Candidate, Curve, RedoResponse, RegenOptions, Selection } from "../types";
+import type {
+  Candidate,
+  Curve,
+  DashboardTake,
+  RedoResponse,
+  RegenOptions,
+  Selection,
+  SelectResponse,
+} from "../types";
 import EngagementTimeline from "./EngagementTimeline";
 import ExportButton from "./ExportButton";
 
@@ -9,6 +17,7 @@ interface Props {
   curve: Curve | null;
   duration: number;
   onClose: () => void;
+  onShowOnDashboard: (take: DashboardTake) => void;
 }
 
 type Phase = "setup" | "generating" | "choose" | "done";
@@ -62,7 +71,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * choose one of the AI takes by its TRIBE engagement score → splice → export.
  * Takes are AI-generated video and labelled as such (PRD Section 10).
  */
-export default function ResegmentStudio({ videoId, curve, duration, onClose }: Props) {
+export default function ResegmentStudio({ videoId, curve, duration, onClose, onShowOnDashboard }: Props) {
   const [options, setOptions] = useState<RegenOptions | null>(null);
   const [custom, setCustom] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -73,6 +82,7 @@ export default function ResegmentStudio({ videoId, curve, duration, onClose }: P
   const [selecting, setSelecting] = useState<string | null>(null);
   const [chosenId, setChosenId] = useState<string | null>(null);
   const [splicedUrl, setSplicedUrl] = useState<string | null>(null);
+  const [spliceResult, setSpliceResult] = useState<SelectResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
 
@@ -138,6 +148,7 @@ export default function ResegmentStudio({ videoId, curve, duration, onClose }: P
       if (!alive.current) return;
       setChosenId(candidateId);
       setSplicedUrl(res.preview_url);
+      setSpliceResult(res);
       setPhase("done");
     } catch (e) {
       if (alive.current) setError(`Splice failed: ${(e as Error).message}`);
@@ -266,6 +277,20 @@ export default function ResegmentStudio({ videoId, curve, duration, onClose }: P
               <button className="btn" onClick={() => setPhase("choose")}>← Back to takes</button>
               <button className="btn" onClick={onClose}>Close</button>
               <ExportButton videoId={videoId} splicedUrl={splicedUrl} />
+              <button
+                className="btn btn-accent"
+                onClick={() =>
+                  onShowOnDashboard({
+                    videoUrl: splicedUrl,
+                    label: chosen?.label ?? chosen?.candidate_id ?? "Chosen take",
+                    t_start: spliceResult?.t_start ?? redo?.t_start ?? 0,
+                    t_end: spliceResult?.t_end ?? redo?.t_end ?? 0,
+                    windows: spliceResult?.windows ?? null,
+                  })
+                }
+              >
+                Show on dashboard
+              </button>
             </div>
           </div>
         )}

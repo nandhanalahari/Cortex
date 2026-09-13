@@ -7,8 +7,8 @@ import ResegmentStudio from "./components/ResegmentStudio";
 import SpikeGraph from "./components/SpikeGraph";
 import UploadPanel from "./components/UploadPanel";
 import VideoPlayer from "./components/VideoPlayer";
-import { REGIONS, engagementFrom, lerpLevels } from "./regions";
-import type { Curve, VertexField } from "./types";
+import { engagementFrom, lerpLevels } from "./regions";
+import type { Curve, DashboardTake, RegionWindow, VertexField } from "./types";
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60);
@@ -20,7 +20,8 @@ export default function App() {
   const [videoId, setVideoId] = useState("");
   const [curve, setCurve] = useState<Curve | null>(null);
   const [verts, setVerts] = useState<VertexField | null>(null);
-  const [regionData, setRegionData] = useState<{ t_start: number; t_end: number; regions: Record<string, number> }[]>([]);
+  const [regionData, setRegionData] = useState<RegionWindow[]>([]);
+  const [takeView, setTakeView] = useState<DashboardTake | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -40,7 +41,15 @@ export default function App() {
     setStarted(true);
     setShowUpload(false);
     setShowResegment(false);
+    setTakeView(null);
     setVideoId(vid);
+    setCurrentTime(0);
+    setPlaying(false);
+  }, []);
+
+  const showTake = useCallback((take: DashboardTake | null) => {
+    setShowResegment(false);
+    setTakeView(take);
     setCurrentTime(0);
     setPlaying(false);
   }, []);
@@ -64,7 +73,7 @@ export default function App() {
           setCurve(c);
           setDuration((prev) => prev || c.duration_sec || 0);
         }
-        const a = act as { windows?: { t_start: number; t_end: number; regions: Record<string, number> }[] } | null;
+        const a = act as { windows?: RegionWindow[] } | null;
         if (a?.windows) setRegionData(a.windows);
         setVerts(v);
       })
@@ -80,33 +89,38 @@ export default function App() {
     setDuration(d || curve?.duration_sec || 0);
   }, [curve]);
 
+  // A spliced take with its own TRIBE windows drives the brain, meter and graph.
+  const takeScored = Boolean(takeView?.windows?.length);
+  const activeWindows = takeScored ? takeView!.windows! : regionData;
+
   const showDuration = duration || curve?.duration_sec || 0;
-  const brainLevels = useMemo(() => lerpLevels(regionData, currentTime), [regionData, currentTime]);
+  const brainLevels = useMemo(() => lerpLevels(activeWindows, currentTime), [activeWindows, currentTime]);
   const engagement = engagementFrom(brainLevels);
 
   const graphTimes = useMemo(() => {
-    const n = 72;
+    const n = 120;
     const dur = showDuration || 1;
     return Array.from({ length: n }, (_, i) => (i / Math.max(1, n - 1)) * dur);
   }, [showDuration]);
 
-  const graphSeries = useMemo(() => {
-    const regionSeries = REGIONS.map((r) => ({
-      key: r.key,
-      label: r.short,
-      color: r.color,
-      values: graphTimes.map((t) => lerpLevels(regionData, t)[r.key] ?? 0),
-    }));
-    return [
-      ...regionSeries,
-      {
-        key: "engagement",
-        label: "ENG",
-        color: "#f5d07a",
-        values: graphTimes.map((t) => engagementFrom(lerpLevels(regionData, t))),
-      },
-    ];
-  }, [graphTimes, regionData]);
+  const engagementLine = useCallback(
+    (windows: RegionWindow[]) => graphTimes.map((t) => engagementFrom(lerpLevels(windows, t))),
+    [graphTimes],
+  );
+
+  const graphLine = useMemo(
+    () => ({
+      label: takeView ? (takeScored ? takeView.label : `${takeView.label} · not scored, showing original`) : "Original",
+      color: "#f5d07a",
+      values: activeWindows.length ? engagementLine(activeWindows) : [],
+    }),
+    [takeView, takeScored, activeWindows, engagementLine],
+  );
+
+  const graphOverlay = useMemo(
+    () => (takeScored && regionData.length ? { label: "Original", color: "#cfd3e6", values: engagementLine(regionData) } : null),
+    [takeScored, regionData, engagementLine],
+  );
 
   if (!started) {
     return (
@@ -141,7 +155,17 @@ export default function App() {
           <span className="badge badge-cloud">CLOUD GPU</span>
           <span className="header-rate">0.5×</span>
           <span className="header-time">{formatTime(currentTime)} / {formatTime(showDuration)}</span>
-          <span className="header-vid">{videoId}</span>
+          {takeView ? (
+            <span className="take-chip" title={videoId}>
+              <span className="ai-label">AI TAKE</span>
+              {takeView.label}
+              <button className="take-chip-x" onClick={() => showTake(null)}>
+                Show original
+              </button>
+            </span>
+          ) : (
+            <span className="header-vid">{videoId}</span>
+          )}
           <button className="btn btn-accent btn-reseg" onClick={openResegment} disabled={!videoId}>
             Resegment
           </button>
@@ -169,7 +193,7 @@ export default function App() {
               </div>
             </div>
           )}
-          {!regionData.length && (
+          {!activeWindows.length && (
             <div className="verts-hint">Drop the Kaggle JSON into data/activations/ to light the six regions</div>
           )}
         </section>
@@ -177,8 +201,9 @@ export default function App() {
         <section className="insight-col">
           <div className="video-wrapper">
             <VideoPlayer
+              key={takeView?.videoUrl ?? "original"}
               ref={videoRef}
-              src={api.sourceUrl(videoId)}
+              src={takeView?.videoUrl ?? api.sourceUrl(videoId)}
               playbackRate={0.5}
               onTime={setCurrentTime}
               onDuration={handleDuration}
@@ -192,7 +217,9 @@ export default function App() {
       <section className="spike-deck">
         <SpikeGraph
           times={graphTimes}
-          series={graphSeries}
+          line={graphLine}
+          overlay={graphOverlay}
+          highlight={takeView ? { t_start: takeView.t_start, t_end: takeView.t_end } : null}
           duration={showDuration}
           currentTime={currentTime}
           onSeek={seekTo}
@@ -209,6 +236,7 @@ export default function App() {
           curve={curve}
           duration={showDuration}
           onClose={() => setShowResegment(false)}
+          onShowOnDashboard={showTake}
         />
       )}
     </div>

@@ -466,6 +466,48 @@ select {
   border-radius: 2px;
   margin-right: 2px;
 }
+.lg-dashed {
+  height: 0;
+  border-top: 2px dashed;
+  border-radius: 0;
+}
+.lg-shade {
+  height: 9px;
+  background: rgba(245, 208, 122, 0.18);
+  border: 1px solid rgba(245, 208, 122, 0.45);
+}
+.spike-now {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--text, #fff);
+  font-variant-numeric: tabular-nums;
+}
+.spike-now.muted { color: var(--muted); }
+.spike-shade { fill: rgba(245, 208, 122, 0.1); stroke: rgba(245, 208, 122, 0.35); stroke-width: 1; }
+.take-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text2);
+  padding: 3px 4px 3px 8px;
+  border: 1px solid rgba(245, 208, 122, 0.35);
+  border-radius: 999px;
+  background: rgba(245, 208, 122, 0.08);
+  white-space: nowrap;
+}
+.take-chip .ai-label { position: static; }
+.take-chip-x {
+  font: inherit;
+  font-size: 10px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.take-chip-x:hover { border-color: var(--accent); }
 .lg-peak { background: #5eead4; }
 .lg-mean { background: #60a5fa; }
 .spike-svg { width: 100%; height: 118px; display: block; cursor: pointer; }

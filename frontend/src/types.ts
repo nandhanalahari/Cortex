@@ -64,10 +64,30 @@ export interface RegenOptions {
   n_takes: number;
 }
 
+export interface RegionWindow {
+  t_start: number;
+  t_end: number;
+  regions: Record<string, number>;
+}
+
 export interface SelectResponse {
   video_id: string;
   status: string;
   preview_url: string;
+  candidate_id?: string | null;
+  t_start?: number | null;
+  t_end?: number | null;
+  /** The spliced ad's windows; null when the take has no TRIBE export. */
+  windows?: RegionWindow[] | null;
+}
+
+/** A spliced take the user sent to the main dashboard. */
+export interface DashboardTake {
+  videoUrl: string;
+  label: string;
+  t_start: number;
+  t_end: number;
+  windows: RegionWindow[] | null;
 }
 
 export interface Selection {

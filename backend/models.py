@@ -99,6 +99,12 @@ class SelectResponse(BaseModel):
     video_id: str
     status: str
     preview_url: str
+    candidate_id: Optional[str] = None
+    t_start: Optional[float] = None
+    t_end: Optional[float] = None
+    # The spliced ad's activation windows (take's span rescored onto the
+    # original's scale); None when the take has no TRIBE export.
+    windows: Optional[List[Window]] = None
 
 
 # ---- Auth (login system, backed by TigerData) ----
