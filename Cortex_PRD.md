@@ -70,16 +70,7 @@ Cortex answers two questions before an ad ships:
 | **Show on dashboard** | After splicing, the main dashboard switches to the edited ad: video, brain, meter and chart all use the edited ad's data (original windows, with the replaced 5 s taken from the take's own TRIBE output) |
 | **Single-line engagement chart with original overlay** | Six region lines were unreadable; one engagement line plus a dashed original line and a shaded replaced span shows the lift directly |
 | **Optional login** | Sign up / log in / log out; the app is fully usable signed out |
-
-### Exploratory
-
-| ID | Feature | Status |
-|---|---|---|
-| E1 | TigerData Creative Memory | ✅ Prompt pairs embedded and stored; similar past edits looked up in parallel with generation (never blocks it); in-memory fallback without a database |
-| E2 | Vultr-hosted TRIBE | ❌ Replaced by Kaggle T4 ×2 |
-| E3 | Consent Gateway | ❌ Not built |
-| E4 | Demographic-aware critique | ❌ Not built |
-| — | Gemini explanations of region activity per timestamp | ❌ Designed, not built (see §10) |
+| **TigerData creative memory** | Prompt pairs are embedded and stored; similar past edits are looked up in parallel with generation so repeated edits aren't blind |
 
 ---
 
@@ -221,7 +212,7 @@ In-process (per session)
 - Gemini region explanations per timestamp, linked to the chart (§10 wording rules)
 - Variable-length segments and multiple edits per ad
 - Validation against real ad metrics (watch time, click-through, conversion)
-- Demographic-aware critique (E4) and a consent gateway (E3)
+- Demographic-aware critique and a consent gateway for videos with recognizable people
 
 ---
 
