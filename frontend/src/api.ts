@@ -1,4 +1,4 @@
-import type { Curve, RedoResponse, SelectResponse, VertexField } from "./types";
+import type { Curve, RedoResponse, RegenOptions, Selection, SelectResponse, VertexField } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -32,11 +32,15 @@ export const api = {
 
   sourceUrl: (videoId: string) => `/api/videos/${videoId}/source`,
 
-  redo: (videoId: string, t_start: number, t_end: number) =>
+  regenOptions: (videoId: string) =>
+    fetch(`/api/videos/${videoId}/regen-options`).then((r) => json<RegenOptions>(r)),
+
+  /** Omit `range` to regenerate the backend's suggested moment. */
+  redo: (videoId: string, range?: Selection | null) =>
     fetch(`/api/videos/${videoId}/segments/redo`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ t_start, t_end }),
+      body: JSON.stringify(range ? { t_start: range.t_start, t_end: range.t_end } : {}),
     }).then((r) => json<RedoResponse>(r)),
 
   select: (videoId: string, segmentId: string, candidateId: string) =>

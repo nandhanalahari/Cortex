@@ -26,6 +26,13 @@ class Window(BaseModel):
     regions: Dict[str, float]
     # Derived by the engagement curve builder (F2); absent in raw handoff.
     engagement_score: Optional[float] = None
+    # Un-normalized TRIBE region means for this window (newer notebook exports).
+    raw_regions: Optional[Dict[str, float]] = None
+
+
+class RegionStats(BaseModel):
+    mean: float
+    std: float
 
 
 class ActivationData(BaseModel):
@@ -34,19 +41,30 @@ class ActivationData(BaseModel):
     video_id: str
     duration_sec: float
     windows: List[Window]
+    # Per-region mean/std of the raw TRIBE series that `regions` was normalized
+    # with (newer notebook exports). Lets another clip be scored on this
+    # video's scale - see engagement_curve.rescore_against.
+    raw_stats: Optional[Dict[str, RegionStats]] = None
 
 
 # ---- API request/response models (PRD Section 6) ----
 
 
 class RedoRequest(BaseModel):
-    t_start: float = Field(..., ge=0)
-    t_end: float = Field(..., gt=0)
+    # Omit both to regenerate the suggested moment (see /regen-options).
+    t_start: Optional[float] = Field(None, ge=0)
+    t_end: Optional[float] = Field(None, gt=0)
 
 
 class Candidate(BaseModel):
     candidate_id: str
     preview_url: str
+    label: Optional[str] = None
+    # Same scale as RedoResponse.baseline_engagement; None when TRIBE hasn't scored it.
+    engagement_score: Optional[float] = None
+    # Where the score came from, or why there isn't one (candidate_library.take_score).
+    score_status: Optional[str] = None
+    duration_sec: Optional[float] = None
 
 
 class SimilarSegment(BaseModel):
@@ -64,6 +82,11 @@ class RedoResponse(BaseModel):
     positive_prompt: str
     negative_prompt: str
     candidates: List[Candidate]
+    t_start: Optional[float] = None
+    t_end: Optional[float] = None
+    # The original segment's engagement, for before/after on each candidate.
+    baseline_engagement: Optional[float] = None
+    candidate_source: Optional[str] = None
     # [EXPLORATORY] Empty whenever memory is off, cold, or too slow to matter.
     similar_segments: List[SimilarSegment] = Field(default_factory=list)
 

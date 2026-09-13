@@ -27,6 +27,20 @@ export interface Curve {
 export interface Candidate {
   candidate_id: string;
   preview_url: string;
+  label?: string | null;
+  /** 0–1, same scale as RedoResponse.baseline_engagement; null when TRIBE hasn't scored it. */
+  engagement_score?: number | null;
+  /** Where the score came from, or why it's missing (backend candidate_library.take_score). */
+  score_status?: string | null;
+  duration_sec?: number | null;
+}
+
+export interface SimilarSegment {
+  segment_id: string;
+  similarity: number;
+  positive_prompt: string;
+  selected_candidate_id?: string | null;
+  engagement_score?: number | null;
 }
 
 export interface RedoResponse {
@@ -34,6 +48,20 @@ export interface RedoResponse {
   positive_prompt: string;
   negative_prompt: string;
   candidates: Candidate[];
+  t_start?: number | null;
+  t_end?: number | null;
+  baseline_engagement?: number | null;
+  candidate_source?: string | null;
+  similar_segments?: SimilarSegment[];
+}
+
+export interface RegenOptions {
+  video_id: string;
+  segment_len_sec: number;
+  suggested: { t_start: number; t_end: number; reason: string };
+  baseline_engagement: number | null;
+  has_library: boolean;
+  n_takes: number;
 }
 
 export interface SelectResponse {

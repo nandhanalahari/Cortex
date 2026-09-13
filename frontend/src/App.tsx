@@ -3,6 +3,7 @@ import { api } from "./api";
 import AutumnGrid from "./components/AutumnGrid";
 import CorticalBrain from "./components/CorticalBrain";
 import EngagementMeter from "./components/EngagementMeter";
+import ResegmentStudio from "./components/ResegmentStudio";
 import SpikeGraph from "./components/SpikeGraph";
 import UploadPanel from "./components/UploadPanel";
 import VideoPlayer from "./components/VideoPlayer";
@@ -26,12 +27,19 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showResegment, setShowResegment] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const openResegment = useCallback(() => {
+    videoRef.current?.pause();
+    setShowResegment(true);
+  }, []);
 
   const begin = useCallback((vid: string) => {
     setError(null);
     setStarted(true);
     setShowUpload(false);
+    setShowResegment(false);
     setVideoId(vid);
     setCurrentTime(0);
     setPlaying(false);
@@ -134,6 +142,9 @@ export default function App() {
           <span className="header-rate">0.5×</span>
           <span className="header-time">{formatTime(currentTime)} / {formatTime(showDuration)}</span>
           <span className="header-vid">{videoId}</span>
+          <button className="btn btn-accent btn-reseg" onClick={openResegment} disabled={!videoId}>
+            Resegment
+          </button>
           <button className="btn btn-upload" onClick={() => setShowUpload(true)}>
             New clip
           </button>
@@ -190,6 +201,15 @@ export default function App() {
 
       {showUpload && (
         <UploadPanel onClose={() => setShowUpload(false)} onReady={begin} />
+      )}
+
+      {showResegment && (
+        <ResegmentStudio
+          videoId={videoId}
+          curve={curve}
+          duration={showDuration}
+          onClose={() => setShowResegment(false)}
+        />
       )}
     </div>
   );

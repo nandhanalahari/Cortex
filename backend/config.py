@@ -37,6 +37,9 @@ class Settings:
     KAGGLE_INBOX_PATH: Path = _resolve(os.getenv("KAGGLE_INBOX_PATH", "./data/kaggle_inbox"))
     WORKSPACE_PATH: Path = _resolve(os.getenv("WORKSPACE_PATH", "./backend/workspace"))
     OUTPUT_PATH: Path = _resolve(os.getenv("OUTPUT_PATH", "./data/outputs"))
+    # Pre-generated candidate takes (made on the ElevenLabs website, since our
+    # plan has no video API). Layout: backend/services/candidate_library.py.
+    CANDIDATES_PATH: Path = _resolve(os.getenv("CANDIDATES_PATH", "./data/candidates"))
 
     # --- External APIs ---
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -70,7 +73,7 @@ class Settings:
     def ensure_dirs(self) -> None:
         for d in (self.ACTIVATION_DATA_PATH, self.ACTIVATION_FALLBACK_PATH,
                   self.VIDEO_DATA_PATH, self.KAGGLE_INBOX_PATH,
-                  self.WORKSPACE_PATH, self.OUTPUT_PATH):
+                  self.WORKSPACE_PATH, self.OUTPUT_PATH, self.CANDIDATES_PATH):
             d.mkdir(parents=True, exist_ok=True)
 
 

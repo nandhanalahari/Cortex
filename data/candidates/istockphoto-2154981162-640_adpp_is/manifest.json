@@ -1,0 +1,7 @@
+{
+  "candidates": [
+    { "file": "Left_Leaning_ElevenLabs_video.mp4.mp4", "label": "Left Leaning" },
+    { "file": "Right_Leaning_ElevenLabs_video.mp4", "label": "Right Leaning" },
+    { "file": "WhiteBG_ElevenLabs_video.mp4", "label": "White Background" }
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "video_id": "Right_Leaning_ElevenLabs_video",
+  "duration_sec": 6.016,
+  "windows": [
+    {
+      "t_start": 0.0,
+      "t_end": 1.5,
+      "regions": {
+        "visual": 0.7126007223961255,
+        "language": 0.5024217788720172,
+        "reward_novelty": 0.7110830691124086,
+        "memory_familiarity": 0.6113785224218189,
+        "emotional_arousal": 0.5033260552478285,
+        "attention_salience": 0.5663636653331376
+      },
+      "raw_regions": {
+        "visual": 0.1957200204450163,
+        "language": -0.2219531121284258,
+        "reward_novelty": -0.008883900237012018,
+        "memory_familiarity": -0.0022611437353419073,
+        "emotional_arousal": -0.17013338056292238,
+        "attention_salience": -0.020195864688332593
+      }
+    },
+    {
+      "t_start": 1.5,
+      "t_end": 3.0,
+      "regions": {
+        "visual": 0.693073337316486,
+        "language": 0.22155615434584708,
+        "reward_novelty": 0.6614213516033001,
+        "memory_familiarity": 0.6497811405742312,
+        "emotional_arousal": 0.24747684005876747,
+        "attention_salience": 0.3946598179681049
+      },
+      "raw_regions": {
+        "visual": 0.18875332741572295,
+        "language": -0.2729318486971726,
+        "reward_novelty": -0.012057126820542094,
+        "memory_familiarity": 0.0014578792330807177,
+        "emotional_arousal": -0.2234040461162131,
+        "attention_salience": -0.03391639704520889
+      }
+    },
+    {
+      "t_start": 3.0,
+      "t_end": 4.5,
+      "regions": {
+        "visual": 0.5278987773337263,
+        "language": 0.42132075324680834,
+        "reward_novelty": 0.32392656589880947,
+        "memory_familiarity": 0.38165086255846503,
+        "emotional_arousal": 0.4051837340919004,
+        "attention_salience": 0.33772210055295054
+      },
+      "raw_regions": {
+        "visual": 0.1363986778365129,
+        "language": -0.2351190582737806,
+        "reward_novelty": -0.03136196594136544,
+        "memory_familiarity": -0.023354664665430305,
+        "emotional_arousal": -0.1889352452622796,
+        "attention_salience": -0.03876828164853606
+      }
+    },
+    {
+      "t_start": 4.5,
+      "t_end": 6.0,
+      "regions": {
+        "visual": 0.2736235142443053,
+        "language": 0.45787928668586636,
+        "reward_novelty": 0.15174132013583883,
+        "memory_familiarity": 0.1269317756365103,
+        "emotional_arousal": 0.4202662670647042,
+        "attention_salience": 0.2930936360368818
+      },
+      "raw_regions": {
+        "visual": 0.05534864913264882,
+        "language": -0.22914195452068073,
+        "reward_novelty": -0.04489499408741948,
+        "memory_familiarity": -0.05594925151375124,
+        "emotional_arousal": -0.18598957560232543,
+        "attention_salience": -0.04285492326380861
+      }
+    },
+    {
+      "t_start": 6.0,
+      "t_end": 6.016,
+      "regions": {
+        "visual": 0.13264965035394732,
+        "language": 0.8850185045124495,
+        "reward_novelty": 0.6729687928558681,
+        "memory_familiarity": 0.7972443620841398,
+        "emotional_arousal": 0.8979828688142958,
+        "attention_salience": 0.8929310141608252
+      },
+      "raw_regions": {
+        "visual": -0.011800278038038082,
+        "language": -0.1401835339737362,
+        "reward_novelty": -0.011342735667953354,
+        "memory_familiarity": 0.01839032771843987,
+        "emotional_arousal": -0.06781105566693157,
+        "attention_salience": 0.016416215036065395
+      }
+    }
+  ],
+  "raw_stats": {
+    "visual": {
+      "mean": 0.12807701358191315,
+      "std": 0.07449169946075546
+    },
+    "language": {
+      "mean": -0.22234309685657178,
+      "std": 0.04025677115178555
+    },
+    "reward_novelty": {
+      "mean": -0.021255226990381407,
+      "std": 0.01373499745867966
+    },
+    "memory_familiarity": {
+      "mean": -0.012476094480539296,
+      "std": 0.022543062190268456
+    },
+    "emotional_arousal": {
+      "mean": -0.1707631327194106,
+      "std": 0.047333065468768004
+    },
+    "attention_salience": {
+      "mean": -0.02546905684952706,
+      "std": 0.01974655376142447
+    }
+  }
+}

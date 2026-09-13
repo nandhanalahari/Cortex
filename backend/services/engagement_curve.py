@@ -13,10 +13,11 @@ Construction:
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import List
 
-from ..models import REGION_KEYS, ActivationData
+from ..models import REGION_KEYS, ActivationData, Window
 
 # Our engagement weighting. Attention/emotion/novelty drive "engagement" most;
 # visual/language/memory are supporting signal. Documented as our construction.
@@ -117,6 +118,68 @@ def build_curve(data: ActivationData, peak_percentile: float = 0.8) -> Engagemen
         prev = eng
 
     return EngagementCurve(video_id=data.video_id, duration_sec=data.duration_sec, scores=scores)
+
+
+def absolute_score(
+    windows: List[Window], t_start: float | None = None, t_end: float | None = None
+) -> float | None:
+    """Mean weighted composite over the windows overlapping [t_start, t_end].
+
+    Unlike `engagement_score` this skips the per-video min-max step, so a
+    candidate take scored on its own and the original's segment land on the
+    same [0, 1] scale and can be compared directly. Same formula as the
+    frontend's live meter (`engagementFrom`).
+    """
+    covered = [
+        w for w in windows
+        if (t_start is None or w.t_end > t_start) and (t_end is None or w.t_start < t_end)
+    ]
+    if not covered:
+        return None
+    return sum(_weighted_composite(w.regions) for w in covered) / len(covered)
+
+
+def rescore_against(take: ActivationData, reference: ActivationData) -> List[Window] | None:
+    """Re-express `take`'s raw region means on `reference`'s normalization.
+
+    The notebook z-scores each region within its own video, so every export
+    averages ~0.5 and two exports' `regions` can't be compared. Using the
+    reference's raw mean/std instead gives the take exactly the values it would
+    have had inside the reference video's normalization, while the reference's
+    own `regions` (and so the original's score) stay unchanged.
+
+    None when either export predates `raw_regions` / `raw_stats`.
+    """
+    if reference.raw_stats is None or any(w.raw_regions is None for w in take.windows):
+        return None
+    out: List[Window] = []
+    for w in take.windows:
+        regions: dict[str, float] = {}
+        for key in REGION_KEYS:
+            stats = reference.raw_stats.get(key)
+            raw = w.raw_regions.get(key) if w.raw_regions else None
+            if stats is None or raw is None:
+                return None
+            z = max(-40.0, min(40.0, (raw - stats.mean) / (stats.std + 1e-6)))
+            regions[key] = 1.0 / (1.0 + math.exp(-z))
+        out.append(Window(t_start=w.t_start, t_end=w.t_end, regions=regions))
+    return out
+
+
+def weakest_span(data: ActivationData, length: float) -> tuple[float, float]:
+    """The `length`-second stretch with the lowest absolute engagement."""
+    duration = data.duration_sec or (data.windows[-1].t_end if data.windows else 0.0)
+    length = min(length, duration)
+    if length <= 0:
+        return 0.0, 0.0
+    latest = duration - length
+    starts = sorted({0.0, latest, *(min(w.t_start, latest) for w in data.windows)})
+    scored = [(absolute_score(data.windows, s, s + length), s) for s in starts]
+    scored = [(v, s) for v, s in scored if v is not None]
+    if not scored:
+        return 0.0, round(length, 3)
+    _, start = min(scored)
+    return round(start, 3), round(start + length, 3)
 
 
 def attach_scores(data: ActivationData) -> ActivationData:

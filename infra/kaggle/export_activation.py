@@ -114,10 +114,14 @@ def to_windows(preds, starts, tr=1.0, masks=None, window_sec=1.5, duration=None)
                 "t_start": float(t_cursor),
                 "t_end": float(t_end),
                 "regions": regions,
+                # Un-normalized means: lets Cortex score another clip (an AI
+                # take) on the scale of this video instead of on the clip by itself.
+                "raw_regions": {k: float(np.mean(series[k][idxs])) for k in series},
             }
         )
         t_cursor = t_end
-    return windows, float(duration)
+    raw_stats = {k: {"mean": float(np.mean(v)), "std": float(np.std(v))} for k, v in series.items()}
+    return windows, float(duration), raw_stats
 
 
 def run_inference(
@@ -183,14 +187,15 @@ def run_inference(
     except Exception as exc:
         print("duration probe failed:", exc)
 
-    windows, duration = to_windows(
+    windows, duration, raw_stats = to_windows(
         preds, starts, tr=tr, masks=masks, window_sec=window_sec, duration=duration
     )
-    # PM handoff schema — exact fields only
+    # PM handoff schema, plus the raw stats that `regions` was normalized with
     payload = {
         "video_id": video_id,
         "duration_sec": float(duration),
         "windows": windows,
+        "raw_stats": raw_stats,
     }
 
     out = Path(out_dir)

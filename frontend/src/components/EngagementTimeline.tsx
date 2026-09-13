@@ -8,6 +8,8 @@ interface Props {
   currentTime: number;
   selection: Selection | null;
   regenMode: boolean;
+  /** Show the draggable window in regen mode; false shows the band read-only. */
+  selectable?: boolean;
   onSeek: (t: number) => void;
   onSelect: (sel: Selection | null) => void;
 }
@@ -26,6 +28,7 @@ export default function EngagementTimeline({
   currentTime,
   selection,
   regenMode,
+  selectable = true,
   onSeek,
   onSelect,
 }: Props) {
@@ -116,7 +119,7 @@ export default function EngagementTimeline({
         </svg>
 
         {/* 5-second edit window only appears in regenerate mode */}
-        {regenMode && (
+        {regenMode && selectable && (
           <SegmentSelector
             duration={duration}
             selection={selection}
