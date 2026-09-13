@@ -1,4 +1,39 @@
-import type { Curve, RedoResponse, RegenOptions, Selection, SelectResponse, VertexField } from "./types";
+import type {
+  AuthResponse,
+  AuthUser,
+  Curve,
+  RedoResponse,
+  RegenOptions,
+  Selection,
+  SelectResponse,
+  VertexField,
+} from "./types";
+
+const SESSION_KEY = "cortex_session";
+
+/** Optional login: the bearer token lives in this browser only. */
+export const session = {
+  get(): string | null {
+    try {
+      return localStorage.getItem(SESSION_KEY);
+    } catch {
+      return null;
+    }
+  },
+  set(token: string | null) {
+    try {
+      if (token) localStorage.setItem(SESSION_KEY, token);
+      else localStorage.removeItem(SESSION_KEY);
+    } catch {
+      /* storage blocked: stay logged out */
+    }
+  },
+};
+
+function authHeaders(): Record<string, string> {
+  const token = session.get();
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -39,16 +74,38 @@ export const api = {
   redo: (videoId: string, range?: Selection | null) =>
     fetch(`/api/videos/${videoId}/segments/redo`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...authHeaders() },
       body: JSON.stringify(range ? { t_start: range.t_start, t_end: range.t_end } : {}),
     }).then((r) => json<RedoResponse>(r)),
 
   select: (videoId: string, segmentId: string, candidateId: string) =>
     fetch(`/api/videos/${videoId}/segments/${segmentId}/select`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...authHeaders() },
       body: JSON.stringify({ candidate_id: candidateId }),
     }).then((r) => json<SelectResponse>(r)),
+
+  signup: (email: string, password: string) =>
+    fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    }).then((r) => json<AuthResponse>(r)),
+
+  login: (email: string, password: string) =>
+    fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    }).then((r) => json<AuthResponse>(r)),
+
+  /** The signed-in user, or null when the stored session is missing/expired. */
+  me: () =>
+    fetch("/api/auth/me", { headers: authHeaders() }).then((r) =>
+      r.status === 401 ? null : json<AuthUser>(r),
+    ),
+
+  logout: () => fetch("/api/auth/logout", { method: "POST", headers: authHeaders() }),
 
   exportUrl: (videoId: string) => `/api/videos/${videoId}/export`,
 
