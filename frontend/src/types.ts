@@ -81,6 +81,17 @@ export interface SelectResponse {
   windows?: RegionWindow[] | null;
 }
 
+export interface AuthUser {
+  id: number;
+  email: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
+
 /** A spliced take the user sent to the main dashboard. */
 export interface DashboardTake {
   videoUrl: string;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "./api";
+import { api, session } from "./api";
+import AuthModal from "./components/AuthModal";
 import AutumnGrid from "./components/AutumnGrid";
 import CorticalBrain from "./components/CorticalBrain";
 import EngagementMeter from "./components/EngagementMeter";
@@ -8,7 +9,7 @@ import SpikeGraph from "./components/SpikeGraph";
 import UploadPanel from "./components/UploadPanel";
 import VideoPlayer from "./components/VideoPlayer";
 import { engagementFrom, lerpLevels } from "./regions";
-import type { Curve, DashboardTake, RegionWindow, VertexField } from "./types";
+import type { AuthUser, Curve, DashboardTake, RegionWindow, VertexField } from "./types";
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60);
@@ -29,7 +30,47 @@ export default function App() {
   const [offline, setOffline] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showResegment, setShowResegment] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!session.get()) return;
+    api
+      .me()
+      .then((u) => {
+        if (u) setUser(u);
+        else session.set(null);
+      })
+      .catch(() => {}); // backend unreachable: keep the token, stay signed-out in the UI
+  }, []);
+
+  const logout = useCallback(() => {
+    api.logout().catch(() => {});
+    session.set(null);
+    setUser(null);
+  }, []);
+
+  const account = user ? (
+    <span className="account-chip" title={user.email}>
+      <span className="account-email">{user.email}</span>
+      <button className="take-chip-x" onClick={logout}>Log out</button>
+    </span>
+  ) : (
+    <button className="btn btn-upload" onClick={() => setShowAuth(true)}>
+      Log in
+    </button>
+  );
+
+  const authModal = showAuth && (
+    <AuthModal
+      onClose={() => setShowAuth(false)}
+      onAuthed={(u) => {
+        setUser(u);
+        setShowAuth(false);
+      }}
+    />
+  );
 
   const openResegment = useCallback(() => {
     videoRef.current?.pause();
@@ -134,10 +175,12 @@ export default function App() {
           <div className="header-right">
             {offline && <span className="badge badge-offline">OFFLINE</span>}
             <span className="badge badge-cloud">CLOUD GPU</span>
+            {account}
           </div>
         </header>
         {error && <div className="error-banner">{error}</div>}
         <UploadPanel embedded onReady={begin} />
+        {authModal}
       </div>
     );
   }
@@ -172,6 +215,7 @@ export default function App() {
           <button className="btn btn-upload" onClick={() => setShowUpload(true)}>
             New clip
           </button>
+          {account}
         </div>
       </header>
 
@@ -239,6 +283,8 @@ export default function App() {
           onShowOnDashboard={showTake}
         />
       )}
+
+      {authModal}
     </div>
   );
 }
