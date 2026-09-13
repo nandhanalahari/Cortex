@@ -1,96 +1,63 @@
-# Cortex — Interface & Pipeline
+# Cortex
 
-Neuro-engagement video editor. Cortex loads **precomputed TRIBE v2 cortical-response
-predictions** for a video, builds a composite **engagement curve**, renders a
-**glowing timeline synced to playback**, and closes the loop: drag-select a weak
-moment → **Gemini** turns it into a prompt pair → **ElevenLabs** generates candidate
-takes → **ffmpeg** splices your pick back into the full video → **export**.
+**See where your video ad loses attention, swap in an AI take that scores higher, ship the rest as-is.**
 
-This repo is the **interface/pipeline half** only. TRIBE v2 inference (Kaggle,
-LLaMA-3.2-3B / V-JEPA2 / Wav2Vec-BERT, GPU) is the teammate's half and is **out of
-scope** here — Cortex only ever *loads already-computed results*. See
-[`Cortex_Interface_PRD.md`](./Cortex_Interface_PRD.md).
+Cortex predicts how a viewer's brain responds to every second of a video ad using Meta's **TRIBE v2**, finds the weakest moment, and replaces it with an AI-generated take — scoring each take on the **same brain-engagement scale** as the original, so you can see whether the fix actually helps.
 
-> This is our own build for a hackathon. It is inspired by the reference project
-> [Percept](https://github.com/edrlu/Percept) but deliberately uses a **different
-> stack** (FastAPI + React/Vite + Gemini + ElevenLabs + ffmpeg, no Redis/Next.js/Seedance).
+Built at **HackRice 16** (Finance & Entrepreneurship) with **Gemini**, **ElevenLabs** and **TigerData**. Full spec: [`Cortex_PRD.md`](./Cortex_PRD.md).
 
 ---
 
-## Stack
+## How it works
 
-| Layer | Tech |
-| --- | --- |
-| Backend | Python 3.11+ · FastAPI · Uvicorn · Pydantic v2 |
-| Video | ffmpeg (extract / splice / export / seed-frame) |
-| AI | Google Gemini (multimodal segment analysis) · ElevenLabs Image & Video (`flows.video`, image-to-video) |
-| Frontend | React 18 · Vite · TypeScript (SVG glowing timeline) |
-
-## Feature map (PRD Section 3)
-
-| PRD | Feature | Where |
-| --- | --- | --- |
-| F1 | Load precomputed activation JSON | `backend/services/activation_loader.py` |
-| F2 | Composite engagement curve builder | `backend/services/engagement_curve.py` |
-| F3 | Video player + synced glowing timeline | `frontend/src/components/VideoPlayer.tsx`, `EngagementTimeline.tsx` |
-| F4 | Manual segment selection (drag) | `frontend/src/components/SegmentSelector.tsx` |
-| F5 | Segment extraction | `backend/services/ffmpeg_service.py › extract_segment` |
-| F6 | Gemini → prompt pair | `backend/services/gemini_service.py` |
-| F7 | ElevenLabs → candidate segments | `backend/services/elevenlabs_service.py` |
-| F8 | Candidate preview UI | `frontend/src/components/CandidatePreview.tsx` |
-| F9 | Selection + splice-back | `backend/services/ffmpeg_service.py › splice_segment` |
-| F10 | Export/download | `ffmpeg_service.py › export_final`, `ExportButton.tsx` |
-
-## API (PRD Section 6)
-
-- `GET  /api/videos` — list videos that have a precomputed activation JSON
-- `POST /api/videos/{id}/load-activation` — handoff JSON echoed with `engagement_score` per window
-- `GET  /api/videos/{id}/curve` — full engagement curve + peak / drop-off markers
-- `GET  /api/videos/{id}/source` — the original demo video
-- `POST /api/videos/{id}/segments/redo` — `{t_start,t_end}` → `{segment_id, positive_prompt, negative_prompt, candidates[]}`
-- `POST /api/videos/{id}/segments/{seg}/select` — `{candidate_id}` → splices, returns preview
-- `GET  /api/videos/{id}/export` — final edited video download
-
-## The data handoff contract (PRD Section 2)
-
-Your teammate drops one JSON per demo video into `data/precomputed/` named
-`<video_id>.json`, bucketing TRIBE v2's ~20k raw vertices into six macro-regions:
-
-```json
-{
-  "video_id": "demo_1",
-  "duration_sec": 15.0,
-  "windows": [
-    { "t_start": 0.0, "t_end": 1.5,
-      "regions": { "visual": 0.62, "language": 0.31, "reward_novelty": 0.44,
-                   "memory_familiarity": 0.20, "emotional_arousal": 0.55,
-                   "attention_salience": 0.58 } }
-  ]
-}
+```
+Ad video ─► TRIBE v2 (GPU) ─► 6 brain regions per 1.5 s ─► engagement curve
+                                                              │
+       weakest 5 s ─► ffmpeg cut ─► Gemini (creative direction) ─► ElevenLabs takes
+                                                              │
+       TRIBE scores each take on the original's scale ─► pick one ─► ffmpeg splice ─► export
 ```
 
-A working sample (`data/precomputed/demo_1.json`) ships in this repo. The matching
-source video goes in `data/videos/demo_1.mp4`.
+1. **Predict.** TRIBE v2 predicts activity at 20,484 points on the brain surface, once per second. Cortex groups them into six regions (visual, language, reward/novelty, memory, emotional arousal, attention) and combines them into an engagement score.
+2. **Fix.** Pick the suggested lowest-engagement 5 seconds (or drag your own). Gemini watches the clip and writes a do/avoid prompt pair; ElevenLabs produces replacement takes with sound effects.
+3. **Prove.** Each take's TRIBE output is re-normalized with the original ad's statistics, so the scores compare directly. Pick the winner, splice it in, view it on the dashboard against the original, and export.
+
+## Features
+
+- **Synced dashboard** — 3D brain lighting by region, live engagement meter, and an engagement line locked to the video playhead (click to seek)
+- **Resegment studio** — suggested or custom 5-second moment → staged generation → three scored take cards with "BEST" badge and delta vs original → splice → export
+- **Show on dashboard** — the edited ad replaces the original on the main screen, with the original drawn as a dashed overlay and the replaced span shaded
+- **Creative memory** — past prompt pairs are embedded and stored in TigerData so similar edits can be recalled
+- **Optional login** — sign up / log in; everything works signed out
+
+## Tech stack
+
+| Layer | Tech | Why |
+|---|---|---|
+| Brain prediction | Meta TRIBE v2 | Predicts brain response to video, audio and speech together |
+| GPU inference | Kaggle Notebook, T4 ×2 | TRIBE v2 needs a GPU |
+| Region grouping | HCP-MMP atlas | Turns 20,484 surface points into six understandable regions |
+| Backend | Python · FastAPI · Pydantic · Uvicorn | The data work (numpy, ffmpeg, Gemini SDK, Postgres) is Python-native; typed requests and auto `/docs` |
+| Frontend | React · TypeScript · Vite · Three.js | Brain, meter, chart and video all update from one shared playback time |
+| Video | ffmpeg / ffprobe | Frame-accurate cuts, trimming, geometry/audio normalization, splicing |
+| Creative direction | Gemini 2.5 Flash | Multimodal: watches the clip and writes a prompt pair |
+| Takes | ElevenLabs | Video with matching sound effects |
+| Memory + accounts | TigerData (Postgres + pgvector) | Vector search over past edits; users and sessions |
 
 ---
 
-## Run it
+## Quick start
 
-### One command (Windows)
+**Requirements:** Python 3.11+, Node 18+, ffmpeg on your PATH.
 
-```powershell
-.\run.ps1
-```
+### macOS / Linux
 
-Then open http://localhost:5173.
-
-### Manual
-
-```powershell
+```bash
 # Backend
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn backend.main:app --port 8000
+python3 -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt
+cp .env.example .env            # then fill in keys (see Configuration)
+.venv/bin/python -m uvicorn backend.main:app --port 8000
 
 # Frontend (new terminal)
 cd frontend
@@ -98,30 +65,100 @@ npm install
 npm run dev
 ```
 
+### Windows
+
+```powershell
+.\run.ps1
+```
+
+Open **http://localhost:5173**. API docs: **http://127.0.0.1:8000/docs**.
+
 ### Configuration
 
-Copy `.env.example` → `.env` and set your keys:
+Copy `.env.example` to `.env`.
+
+| Variable | Used for |
+|---|---|
+| `GEMINI_API_KEY` | Creative direction + memory embeddings |
+| `ELEVENLABS_API_KEY` | Take generation |
+| `TIGERDATA_CONNECTION_STRING` or `TIGER_DATABASE_URL` | Creative memory + login |
+
+Apply the TigerData schema once:
+
+```bash
+psql "$TIGER_DATABASE_URL" -f infra/tigerdata_schema.sql
+```
+
+---
+
+## TRIBE v2 inference
+
+TRIBE v2 runs on GPU (Kaggle T4 ×2). Setup: [`infra/kaggle_setup.md`](./infra/kaggle_setup.md) — GPU T4 ×2, internet on, `HF_TOKEN` secret, Llama-3.2-3B license accepted, then run `infra/kaggle/tribe_v2_inference.ipynb` on the ad.
+
+Inference produces two files for Cortex, placed in `data/activations/`:
+
+| File | Contents |
+|---|---|
+| `{video_id}.json` | Six-region windows + raw stats (drives scoring) |
+| `{video_id}_preds.npz` | Full (T × 20,484) prediction array |
+
+Then open the same ad in Cortex.
+
+> When running several videos in one Kaggle session, clear `/kaggle/working/cache` between videos — TRIBE caches features by file path.
+
+---
+
+## Project structure
 
 ```
-GEMINI_API_KEY=...
-ELEVENLABS_API_KEY=...       # ElevenLabs Image & Video needs a Pro plan or above
-OFFLINE_MODE=false           # true = always use mock/local candidates
+backend/
+  main.py                     FastAPI app, /api/health, /media
+  api/videos.py               video, scoring, Resegment, splice, export routes
+  api/auth.py                 optional login routes
+  services/
+    activation_loader.py      loads and validates TRIBE activation data
+    engagement_curve.py       engagement composite, weakest span, same-scale rescoring
+    candidate_library.py      take scoring
+    ffmpeg_service.py         cut, trim, normalize, splice, export
+    gemini_service.py         prompt pair from the clip
+    elevenlabs_service.py     take generation
+    memory_service.py         TigerData creative memory
+    auth_service.py           bcrypt passwords, session tokens
+    vertex_field.py           per-vertex field from TRIBE predictions
+frontend/src/
+  App.tsx                     dashboard state and layout
+  components/                 CorticalBrain, VideoPlayer, EngagementMeter, SpikeGraph,
+                              ResegmentStudio, AuthModal, UploadPanel
+infra/
+  kaggle/tribe_v2_inference.ipynb   TRIBE v2 GPU inference
+  tigerdata_schema.sql              creative_memory, users, sessions
 ```
 
-`FFMPEG_BIN` / `FFPROBE_BIN` already point at the portable ffmpeg under `.tools/`.
+## API
 
-## Offline / demo-safety mode (PRD Section 10)
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/videos` | Videos with TRIBE data |
+| POST | `/api/videos/upload-video` | Upload an ad |
+| GET | `/api/videos/{id}/curve` | Engagement curve |
+| GET | `/api/videos/{id}/regen-options` | Suggested moment + baseline score |
+| POST | `/api/videos/{id}/segments/redo` | Prompt pair + scored takes |
+| POST | `/api/videos/{id}/segments/{seg}/select` | Splice a take; returns preview + edited ad's data |
+| GET | `/api/videos/{id}/export` | Download the edited ad |
+| POST | `/api/auth/signup` · `/api/auth/login` · `/api/auth/logout` | Optional login |
 
-If no API keys are set (or `OFFLINE_MODE=true`, or a live call fails), Cortex
-gracefully falls back:
-- **Gemini** → a deterministic mock prompt pair.
-- **ElevenLabs** → three **local ffmpeg variant clips** of the original segment
-  (distinct color/motion treatments) so the full redo → splice → export loop still
-  runs with no network. AI-generated candidates are always labelled in the UI.
+Full list: [`Cortex_PRD.md` §8](./Cortex_PRD.md#8-api) or http://127.0.0.1:8000/docs.
 
-## Honesty contract (PRD Section 10)
+---
 
-- The engagement curve is *our* scoring construction on top of the raw six-region
-  data — TRIBE v2 has no built-in single "engagement" score.
-- The glowing timeline is a **replay of precomputed data**, not live inference.
-- ElevenLabs candidates are **AI-generated video**, labelled as such.
+## Responsible AI
+
+- TRIBE v2 **predicts an average viewer's** brain response; nobody's brain is scanned.
+- The engagement score is **our weighting** of six regions; TRIBE has no engagement score of its own.
+- Takes are labeled **AI-generated**, and a take without TRIBE data is shown as unscored rather than given a made-up number.
+- TRIBE v2 weights are **CC BY-NC-4.0** — non-commercial use only.
+
+## Acknowledgments
+
+- [Meta TRIBE v2](https://github.com/facebookresearch/tribev2)
+- [Percept](https://github.com/edrlu/Percept), which inspired using TRIBE v2 as an ad-engagement signal

@@ -34,9 +34,7 @@ Do **not** use Cursor FileLink — that creates empty stubs.
 
 ## Then in the Cortex UI
 
-Upload **only the same video** you sent to Kaggle Cell 3.
-
-The interface pretends TRIBE is predicting live: 0.5× playback, brain + graph locked to the playhead, `TRIBE V2 · PREDICTING` overlay. Nothing else is uploaded in the UI.
+Upload **the same video** you sent to Kaggle Cell 3. The dashboard plays it at 0.5× with the brain, meter and engagement line locked to the playhead.
 
 ## What the laptop must never do
 
