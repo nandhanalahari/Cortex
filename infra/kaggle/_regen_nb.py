@@ -109,14 +109,18 @@ while t0 < duration - 1e-6 and len(starts_arr):
         "t_start": float(t0),
         "t_end": float(t1),
         "regions": {k: sigmoid(float(np.mean(z_regions[k][idxs]))) for k in z_regions},
+        # Un-normalized region means: lets Cortex score another clip (an AI
+        # take) on the scale of this video instead of on the clip by itself.
+        "raw_regions": {k: float(np.mean(series[k][idxs])) for k in series},
     })
     t0 = t1
 
-# PM handoff schema — exact fields only
+# PM handoff schema, plus the raw stats that `regions` was normalized with
 payload = {
     "video_id": VIDEO_ID,
     "duration_sec": float(duration),
     "windows": windows,
+    "raw_stats": {k: {"mean": float(np.mean(v)), "std": float(np.std(v))} for k, v in series.items()},
 }
 np.savez_compressed(OUT_DIR / f"{VIDEO_ID}_preds.npz", preds=preds.astype(np.float32), starts=starts_arr.astype(np.float32))
 json_path = OUT_DIR / f"{VIDEO_ID}.json"

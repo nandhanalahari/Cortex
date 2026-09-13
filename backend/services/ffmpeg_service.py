@@ -65,6 +65,27 @@ def probe_duration(path: Path) -> float:
     return float(json.loads(out)["format"]["duration"])
 
 
+def fit_to_duration(path: Path, seconds: float) -> Path:
+    """Trim `path` to its first `seconds` when it runs long.
+
+    A take longer than the window it replaces would stretch the edited video.
+    The opening is kept because that's the part seeded for continuity. Shorter
+    clips come back unchanged - there's nothing to invent.
+    """
+    try:
+        total = probe_duration(path)
+    except (FFmpegError, KeyError, ValueError):
+        return path
+    if seconds <= 0 or total <= seconds + 0.05:
+        return path
+    out = _new_path(".mp4")
+    _run([
+        settings.FFMPEG_BIN, "-y", "-i", str(path), "-t", f"{seconds:.3f}",
+        "-c:v", "libx264", "-c:a", "aac", "-preset", "fast", str(out),
+    ])
+    return out
+
+
 def extract_segment(video_id: str, t_start: float, t_end: float) -> Path:
     """F5: extract [t_start, t_end] (re-encoded for frame-accurate cuts)."""
     if t_end <= t_start:
@@ -94,16 +115,84 @@ def grab_seed_frame(video_id: str, t_seconds: float) -> Path:
     return out
 
 
+def has_audio(path: Path) -> bool:
+    """True when the file carries at least one audio stream."""
+    try:
+        out = _run([
+            settings.FFPROBE_BIN, "-v", "error",
+            "-select_streams", "a",
+            "-show_entries", "stream=index",
+            "-of", "json", str(path),
+        ])
+        return bool(json.loads(out).get("streams"))
+    except Exception:  # noqa: BLE001 - treat an unreadable probe as "no audio"
+        return False
+
+
+def probe_dimensions(path: Path) -> tuple[int, int]:
+    """(width, height) of the first video stream."""
+    out = _run([
+        settings.FFPROBE_BIN, "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "json", str(path),
+    ])
+    s = json.loads(out)["streams"][0]
+    return int(s["width"]), int(s["height"])
+
+
+def _ensure_audio(path: Path) -> Path:
+    """Return a version of `path` guaranteed to have an audio stream.
+
+    A candidate can be silent (a website export without SFX, for one). Concat
+    maps [i:a:0] on every input, so a silent part would break the whole splice.
+    """
+    if has_audio(path):
+        return path
+    out = _new_path(".mp4")
+    _run([
+        settings.FFMPEG_BIN, "-y",
+        "-i", str(path),
+        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+        "-map", "0:v:0", "-map", "1:a:0",
+        "-c:v", "copy", "-c:a", "aac", "-shortest",
+        str(out),
+    ])
+    return out
+
+
 def _concat(parts: List[Path], out: Path) -> None:
-    """Concatenate clips by re-encoding through the concat filter (robust to codec diffs)."""
+    """Concatenate clips by re-encoding through the concat filter.
+
+    Every input is normalized to the first part's geometry first. The concat
+    filter refuses inputs whose size/SAR differ, and generated candidates
+    routinely differ from the source (ElevenLabs renders 1080p, the local
+    fallback's push-in variant renders 720p, the original may be 360p).
+    """
     parts = [p for p in parts if p is not None]
     if not parts:
         raise FFmpegError("Nothing to concatenate.")
+
+    parts = [_ensure_audio(p) for p in parts]
+    width, height = probe_dimensions(parts[0])
+
     cmd: List[str] = [settings.FFMPEG_BIN, "-y"]
     for p in parts:
         cmd += ["-i", str(p)]
+
     n = len(parts)
-    filt = "".join(f"[{i}:v:0][{i}:a:0]" for i in range(n)) + f"concat=n={n}:v=1:a=1[v][a]"
+    chains = []
+    for i in range(n):
+        chains.append(
+            f"[{i}:v:0]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v{i}]"
+        )
+        # Audio has to agree on rate/layout for the same reason the video does.
+        chains.append(f"[{i}:a:0]aformat=sample_rates=48000:channel_layouts=stereo[a{i}]")
+
+    filt = ";".join(chains) + ";"
+    filt += "".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[v][a]"
+
     cmd += ["-filter_complex", filt, "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-c:a", "aac", "-preset", "fast", str(out)]
     _run(cmd)

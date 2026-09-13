@@ -1,0 +1,132 @@
+{
+  "video_id": "Left_Leaning_ElevenLabs_video.mp4",
+  "duration_sec": 6.016,
+  "windows": [
+    {
+      "t_start": 0.0,
+      "t_end": 1.5,
+      "regions": {
+        "visual": 0.6456556569276942,
+        "language": 0.4874567341826432,
+        "reward_novelty": 0.5999015902242737,
+        "memory_familiarity": 0.29469048967777567,
+        "emotional_arousal": 0.44924643529636665,
+        "attention_salience": 0.49074234114240484
+      },
+      "raw_regions": {
+        "visual": 0.2025634380649866,
+        "language": -0.17742051848052892,
+        "reward_novelty": -0.010879668336585106,
+        "memory_familiarity": -0.014726963496964163,
+        "emotional_arousal": -0.12619012862211354,
+        "attention_salience": -0.0008087334494958336
+      }
+    },
+    {
+      "t_start": 1.5,
+      "t_end": 3.0,
+      "regions": {
+        "visual": 0.7222820452846241,
+        "language": 0.208932020893357,
+        "reward_novelty": 0.5777384630803941,
+        "memory_familiarity": 0.6252621713915643,
+        "emotional_arousal": 0.26307349902117394,
+        "attention_salience": 0.41335371533133036
+      },
+      "raw_regions": {
+        "visual": 0.22476236048401313,
+        "language": -0.22312236914237704,
+        "reward_novelty": -0.011712113624191757,
+        "memory_familiarity": 0.01093617855886566,
+        "emotional_arousal": -0.15872324849663633,
+        "attention_salience": -0.006642436433335212
+      }
+    },
+    {
+      "t_start": 3.0,
+      "t_end": 4.5,
+      "regions": {
+        "visual": 0.5624227997523257,
+        "language": 0.45175069486194125,
+        "reward_novelty": 0.3124423944640768,
+        "memory_familiarity": 0.4873553317846009,
+        "emotional_arousal": 0.44521363443480544,
+        "attention_salience": 0.319787452162991
+      },
+      "raw_regions": {
+        "visual": 0.18078976590560458,
+        "language": -0.18253636572232662,
+        "reward_novelty": -0.021733439973685265,
+        "memory_familiarity": 0.0005102019090450147,
+        "emotional_arousal": -0.12683237463302166,
+        "attention_salience": -0.014181937517236762
+      }
+    },
+    {
+      "t_start": 4.5,
+      "t_end": 6.0,
+      "regions": {
+        "visual": 0.386407711284821,
+        "language": 0.4563098040905806,
+        "reward_novelty": 0.21610968460598382,
+        "memory_familiarity": 0.3232901184210083,
+        "emotional_arousal": 0.4175542819530765,
+        "attention_salience": 0.4060609107394518
+      },
+      "raw_regions": {
+        "visual": 0.13627878665001628,
+        "language": -0.18188029667710676,
+        "reward_novelty": -0.026277201316143816,
+        "memory_familiarity": -0.01224306913661385,
+        "emotional_arousal": -0.13127304003350884,
+        "attention_salience": -0.007204320363889879
+      }
+    },
+    {
+      "t_start": 6.0,
+      "t_end": 6.016,
+      "regions": {
+        "visual": 0.10016723199739803,
+        "language": 0.8801813980891717,
+        "reward_novelty": 0.8509824550163982,
+        "memory_familiarity": 0.8882857576827213,
+        "emotional_arousal": 0.9011764923128203,
+        "attention_salience": 0.9100265560155452
+      },
+      "raw_regions": {
+        "visual": 0.02816233964239233,
+        "language": -0.10449637290222716,
+        "reward_novelty": 0.0012787208750934444,
+        "memory_familiarity": 0.03987518636611447,
+        "emotional_arousal": -0.031147273481491686,
+        "attention_salience": 0.042997474310922
+      }
+    }
+  ],
+  "raw_stats": {
+    "visual": {
+      "mean": 0.16512998495965772,
+      "std": 0.062388383614373974
+    },
+    "language": {
+      "mean": -0.17563040101820312,
+      "std": 0.0356703693634732
+    },
+    "reward_novelty": {
+      "mean": -0.014562401526540411,
+      "std": 0.009090931773636476
+    },
+    "memory_familiarity": {
+      "mean": 0.0014478246589325696,
+      "std": 0.01853295466979377
+    },
+    "emotional_arousal": {
+      "mean": -0.1181697955031296,
+      "std": 0.03936919352704766
+    },
+    "attention_salience": {
+      "mean": -0.00011866063139546924,
+      "std": 0.018632057376469082
+    }
+  }
+}

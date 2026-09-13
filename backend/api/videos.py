@@ -23,19 +23,81 @@ from ..models import (
     SelectRequest,
     SelectResponse,
     SimilarSegment,
+    Window,
 )
 from ..services import (
     activation_loader,
+    candidate_library,
     elevenlabs_service,
     ffmpeg_service,
     gemini_service,
     memory_service,
     vertex_field,
 )
-from ..services.engagement_curve import attach_scores, build_curve
+from ..services.elevenlabs_service import GeneratedCandidate
+from ..services.engagement_curve import (
+    absolute_score,
+    attach_scores,
+    build_curve,
+    rescore_against,
+    weakest_span,
+)
 from ..store import SegmentRecord, store
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
+
+# Matches the frontend's fixed regenerate window (SegmentSelector.SEGMENT_LEN).
+SEGMENT_LEN_SEC = 5.0
+
+
+def _suggested_segment(
+    video_id: str, library: candidate_library.Library | None
+) -> tuple[float, float, str]:
+    """(t_start, t_end, reason) for the moment to regenerate when the user doesn't pick one."""
+    if library and library.t_start is not None and library.t_end is not None \
+            and library.t_end > library.t_start:
+        return library.t_start, library.t_end, "takes_generated_for"
+    try:
+        data = activation_loader.load_activation(video_id)
+    except Exception:  # noqa: BLE001 - no activation just means no smarter suggestion
+        return 0.0, SEGMENT_LEN_SEC, "default"
+    t_start, t_end = weakest_span(data, SEGMENT_LEN_SEC)
+    return t_start, t_end, "lowest_engagement"
+
+
+def _activation_or_none(video_id: str) -> ActivationData | None:
+    try:
+        return activation_loader.load_activation(video_id)
+    except Exception:  # noqa: BLE001 - a missing/invalid activation just means no score
+        return None
+
+
+def _baseline_engagement(video_id: str, t_start: float, t_end: float) -> float | None:
+    """The original segment's score on the same scale as the candidates' scores."""
+    data = _activation_or_none(video_id)
+    if data is None:
+        return None
+    score = absolute_score(data.windows, t_start, t_end)
+    return round(score, 4) if score is not None else None
+
+
+def _prompt_pair(
+    library: candidate_library.Library | None, segment_path: Path, t_start: float, t_end: float
+) -> tuple[str, str]:
+    """The prompts the takes were actually made from win over a fresh Gemini read."""
+    if library and library.positive_prompt and library.negative_prompt:
+        return library.positive_prompt, library.negative_prompt
+    positive, negative = gemini_service.analyze_segment(segment_path, t_start, t_end)
+    if library:
+        return library.positive_prompt or positive, library.negative_prompt or negative
+    return positive, negative
+
+
+def _duration_or_none(path: Path) -> float | None:
+    try:
+        return round(ffmpeg_service.probe_duration(path), 2)
+    except (ffmpeg_service.FFmpegError, KeyError, ValueError):
+        return None
 
 
 def _segment_engagement(video_id: str, t_start: float, t_end: float) -> float | None:
@@ -242,23 +304,48 @@ def get_source_video(video_id: str):
     return FileResponse(path, media_type="video/mp4", filename=path.name)
 
 
+@router.get("/{video_id}/regen-options")
+def regen_options(video_id: str) -> dict:
+    """What the Resegment studio needs up front: the suggested moment, its
+    current score, and whether pre-generated takes are waiting for this video."""
+    library = candidate_library.find(video_id)
+    t_start, t_end, reason = _suggested_segment(video_id, library)
+    return {
+        "video_id": video_id,
+        "segment_len_sec": SEGMENT_LEN_SEC,
+        "suggested": {"t_start": t_start, "t_end": t_end, "reason": reason},
+        "baseline_engagement": _baseline_engagement(video_id, t_start, t_end),
+        "has_library": library is not None,
+        "n_takes": len(library.takes) if library else 0,
+    }
+
+
 @router.post("/{video_id}/segments/redo", response_model=RedoResponse)
 def redo_segment(
     video_id: str,
     req: RedoRequest,
     user=Depends(get_optional_user),
 ) -> RedoResponse:
-    """F5-F7: extract segment -> Gemini prompt pair -> ElevenLabs candidates."""
-    if req.t_end <= req.t_start:
+    """F5-F7: extract segment -> Gemini prompt pair -> candidates.
+
+    Candidates come from the pre-generated library when one exists for this
+    video (data/candidates/), otherwise from ElevenLabs / the local fallback.
+    """
+    library = candidate_library.find(video_id)
+    if req.t_start is None or req.t_end is None:
+        t_start, t_end, _ = _suggested_segment(video_id, library)
+    else:
+        t_start, t_end = req.t_start, req.t_end
+    if t_end <= t_start:
         raise HTTPException(status_code=400, detail="t_end must be greater than t_start.")
 
     try:
-        segment_path = ffmpeg_service.extract_segment(video_id, req.t_start, req.t_end)
-        seed_frame = ffmpeg_service.grab_seed_frame(video_id, req.t_start)
+        segment_path = ffmpeg_service.extract_segment(video_id, t_start, t_end)
+        seed_frame = ffmpeg_service.grab_seed_frame(video_id, t_start)
     except ffmpeg_service.FFmpegError as exc:
         raise HTTPException(status_code=500, detail=f"ffmpeg: {exc}") from exc
 
-    positive, negative = gemini_service.analyze_segment(segment_path, req.t_start, req.t_end)
+    positive, negative = _prompt_pair(library, segment_path, t_start, t_end)
 
     # E1: the creative-memory lookup rides alongside generation rather than
     # gating it (PRD Section 13) - ElevenLabs is the long pole either way.
@@ -266,13 +353,26 @@ def redo_segment(
     try:
         memory_future = pool.submit(memory_service.find_similar, positive, negative)
 
-        generated = elevenlabs_service.generate_candidates(
-            positive_prompt=positive,
-            negative_prompt=negative,
-            seed_frame=seed_frame,
-            segment_path=segment_path,
-            duration=req.t_end - req.t_start,
-        )
+        if library is not None:
+            try:
+                generated = [
+                    GeneratedCandidate(
+                        candidate_id=take.candidate_id,
+                        path=candidate_library.materialize(video_id, take),
+                        source="elevenlabs_web",
+                    )
+                    for take in library.takes
+                ]
+            except ffmpeg_service.FFmpegError as exc:
+                raise HTTPException(status_code=500, detail=f"ffmpeg preparing takes: {exc}") from exc
+        else:
+            generated = elevenlabs_service.generate_candidates(
+                positive_prompt=positive,
+                negative_prompt=negative,
+                seed_frame=seed_frame,
+                segment_path=segment_path,
+                duration=t_end - t_start,
+            )
         if not generated:
             raise HTTPException(status_code=502, detail="No candidate segments were produced.")
 
@@ -280,20 +380,34 @@ def redo_segment(
     finally:
         pool.shutdown(wait=False)
 
+    takes = {take.candidate_id: take for take in library.takes} if library else {}
+    # Takes are scored on the original's normalization so the numbers compare.
+    reference = _activation_or_none(video_id) if library else None
     segment_id = store.new_segment_id()
     rec = SegmentRecord(
         segment_id=segment_id,
         video_id=video_id,
-        t_start=req.t_start,
-        t_end=req.t_end,
+        t_start=t_start,
+        t_end=t_end,
         positive_prompt=positive,
         negative_prompt=negative,
         candidate_source=generated[0].source,
     )
     candidates = []
-    for g in generated:
+    for i, g in enumerate(generated, start=1):
         rec.candidates[g.candidate_id] = g.path
-        candidates.append(Candidate(candidate_id=g.candidate_id, preview_url=f"/media/{g.path.name}"))
+        take = takes.get(g.candidate_id)
+        score, status = (
+            candidate_library.take_score(take, reference, t_end - t_start) if take else (None, None)
+        )
+        candidates.append(Candidate(
+            candidate_id=g.candidate_id,
+            preview_url=f"/media/{g.path.name}",
+            label=take.label if take else f"Take {i}",
+            engagement_score=score,
+            score_status=status,
+            duration_sec=_duration_or_none(g.path),
+        ))
     store.put_segment(rec)
     memory_service.remember(
         segment_id, video_id, positive, negative, user_id=user.id if user else None
@@ -304,6 +418,10 @@ def redo_segment(
         positive_prompt=positive,
         negative_prompt=negative,
         candidates=candidates,
+        t_start=t_start,
+        t_end=t_end,
+        baseline_engagement=_baseline_engagement(video_id, t_start, t_end),
+        candidate_source=generated[0].source,
         similar_segments=[SimilarSegment(**hit.__dict__) for hit in similar],
     )
 
@@ -320,6 +438,8 @@ def select_candidate(video_id: str, segment_id: str, req: SelectRequest) -> Sele
         raise HTTPException(status_code=404, detail=f"Unknown candidate '{req.candidate_id}'.")
 
     try:
+        # A 6s take in a 5s window would stretch the ad; keep its opening instead.
+        replacement = ffmpeg_service.fit_to_duration(replacement, rec.t_end - rec.t_start)
         spliced = ffmpeg_service.splice_segment(video_id, rec.t_start, rec.t_end, replacement)
     except ffmpeg_service.FFmpegError as exc:
         raise HTTPException(status_code=500, detail=f"ffmpeg splice: {exc}") from exc
@@ -328,7 +448,53 @@ def select_candidate(video_id: str, segment_id: str, req: SelectRequest) -> Sele
     memory_service.record_outcome(
         segment_id, req.candidate_id, _segment_engagement(video_id, rec.t_start, rec.t_end)
     )
-    return SelectResponse(video_id=video_id, status="spliced", preview_url=f"/media/{spliced.name}")
+    return SelectResponse(
+        video_id=video_id,
+        status="spliced",
+        preview_url=f"/media/{spliced.name}",
+        candidate_id=req.candidate_id,
+        t_start=rec.t_start,
+        t_end=rec.t_end,
+        windows=_spliced_windows(video_id, rec.t_start, rec.t_end, req.candidate_id),
+    )
+
+
+def _spliced_windows(
+    video_id: str, t_start: float, t_end: float, candidate_id: str
+) -> list[Window] | None:
+    """Activation windows for the spliced ad: the original's, with the replaced
+    span swapped for the take's own TRIBE windows on the original's scale.
+
+    None when the take has no usable TRIBE export - no curve is invented for it.
+    """
+    original = _activation_or_none(video_id)
+    library = candidate_library.find(video_id)
+    take = next((t for t in library.takes if t.candidate_id == candidate_id), None) if library else None
+    if original is None or take is None or take.activation is None:
+        return None
+    try:
+        take_data = ActivationData.model_validate(json.loads(take.activation.read_text(encoding="utf-8")))
+    except Exception:  # noqa: BLE001 - an unreadable export just means no curve
+        return None
+    rescored = rescore_against(take_data, original)
+    if rescored is None:
+        return None
+
+    seg = t_end - t_start
+    before = [
+        Window(t_start=w.t_start, t_end=min(w.t_end, t_start), regions=w.regions)
+        for w in original.windows if w.t_start < t_start
+    ]
+    # Only the take's opening `seg` seconds are spliced in (fit_to_duration).
+    inside = [
+        Window(t_start=t_start + w.t_start, t_end=t_start + min(w.t_end, seg), regions=w.regions)
+        for w in rescored if w.t_start < seg
+    ]
+    after = [
+        Window(t_start=max(w.t_start, t_end), t_end=w.t_end, regions=w.regions)
+        for w in original.windows if w.t_end > t_end
+    ]
+    return before + inside + after
 
 
 @router.get("/{video_id}/export")

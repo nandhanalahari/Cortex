@@ -27,6 +27,20 @@ export interface Curve {
 export interface Candidate {
   candidate_id: string;
   preview_url: string;
+  label?: string | null;
+  /** 0–1, same scale as RedoResponse.baseline_engagement; null when TRIBE hasn't scored it. */
+  engagement_score?: number | null;
+  /** Where the score came from, or why it's missing (backend candidate_library.take_score). */
+  score_status?: string | null;
+  duration_sec?: number | null;
+}
+
+export interface SimilarSegment {
+  segment_id: string;
+  similarity: number;
+  positive_prompt: string;
+  selected_candidate_id?: string | null;
+  engagement_score?: number | null;
 }
 
 export interface RedoResponse {
@@ -34,12 +48,46 @@ export interface RedoResponse {
   positive_prompt: string;
   negative_prompt: string;
   candidates: Candidate[];
+  t_start?: number | null;
+  t_end?: number | null;
+  baseline_engagement?: number | null;
+  candidate_source?: string | null;
+  similar_segments?: SimilarSegment[];
+}
+
+export interface RegenOptions {
+  video_id: string;
+  segment_len_sec: number;
+  suggested: { t_start: number; t_end: number; reason: string };
+  baseline_engagement: number | null;
+  has_library: boolean;
+  n_takes: number;
+}
+
+export interface RegionWindow {
+  t_start: number;
+  t_end: number;
+  regions: Record<string, number>;
 }
 
 export interface SelectResponse {
   video_id: string;
   status: string;
   preview_url: string;
+  candidate_id?: string | null;
+  t_start?: number | null;
+  t_end?: number | null;
+  /** The spliced ad's windows; null when the take has no TRIBE export. */
+  windows?: RegionWindow[] | null;
+}
+
+/** A spliced take the user sent to the main dashboard. */
+export interface DashboardTake {
+  videoUrl: string;
+  label: string;
+  t_start: number;
+  t_end: number;
+  windows: RegionWindow[] | null;
 }
 
 export interface Selection {
